@@ -37,22 +37,28 @@ int main()
             // TODO: 在此处为应用程序的行为编写代码。
             //server;
             // TODO: 在此处为应用程序的行为编写代码。
-            SOCKET serv = socket(PF_INET, SOCK_STREAM, 0);
-            //校验
-            sockaddr_in serv_addr, client_addr;
-            memset(&serv_addr, 0, sizeof(serv_addr));
-            serv_addr.sin_family = AF_INET;
-            serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-            serv_addr.sin_port = htons(12345);
+			CServerSocket& server = CServerSocket::GetInstance();   
+            int count = 0;
+            if (server.initSocket()) {
 
-            bind(serv, (SOCKADDR*)&serv_addr, sizeof(SOCKADDR));
-            listen(serv, 1);
-            char buffer[1024];
-            int client_addr_size = sizeof(SOCKADDR);
-            //accept(serv, (SOCKADDR*)&client_addr, &client_addr_size);
-            //recv(serv, buffer, sizeof(buffer), 0);
-            //send(serv, buffer, sizeof(buffer), 0);
-            closesocket(serv);
+                while (true){
+                    if (server.AcceptClient()) {
+                        server.DealCommand();
+                    }
+                    else {
+                        if (count >= 3) {
+                            MessageBox(NULL, L"AcceptClient 失败", L"错误", MB_OK);
+                        }
+                        exit(0);
+                    }
+                }
+          
+			}
+            else {
+                MessageBox(NULL, L"initSocket 失败,初始化异常", L"错误", MB_OK);
+                exit(0);
+            }
+               
         }
     }
     else

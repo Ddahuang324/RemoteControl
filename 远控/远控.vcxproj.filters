@@ -13,6 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{49f0eb41-4375-4990-8e6b-1bab1af84fe1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{f7b94f57-542b-4058-a24f-5cb51358cfba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\network">
+      <UniqueIdentifier>{eb429477-9ee6-49e8-a75e-d213cdbe6abc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -31,7 +40,7 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="ServerSocket.h">
-      <Filter>头文件</Filter>
+      <Filter>include\network</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
