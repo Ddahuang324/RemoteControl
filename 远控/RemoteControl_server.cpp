@@ -9,7 +9,10 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-
+#pragma comment (linker , "/subsystem:windows /ENTRY:mainCRTStartup")
+#pragma comment (linker , "/subsystem:windows /ENTRY:WinMainCRTStartup")
+#pragma comment (linker , "/subsystem:console /ENTRY:mainCRTStartup")
+#pragma comment (linker , "/subsystem:console /ENTRY:WinMainCRTStartup")
 
 // 唯一的应用程序对象
 
@@ -31,7 +34,7 @@ int main()
             // TODO: 在此处为应用程序的行为编写代码。
             wprintf(L"错误: MFC 初始化失败\n");
             nRetCode = 1;
-        }
+        } 
         else
         {
             // TODO: 在此处为应用程序的行为编写代码。

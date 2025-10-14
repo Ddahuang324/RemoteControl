@@ -2,6 +2,76 @@
 #include "pch.h"
 #include "framework.h"
 
+
+class Cpacket {
+public:
+	Cpacket() :sHead(0), nLength(0), sCmd(0), sSum(0) {}
+    Cpacket(const Cpacket& pkt) {
+		sHead = pkt.sHead;
+		nLength = pkt.nLength;
+		sCmd = pkt.sCmd;
+        strData = pkt.strData;
+		sSum = pkt.sSum;
+    }
+    Cpacket(const BYTE* pData, size_t& nSize) {
+		size_t  i = 0;
+
+        for(; i < nSize; i++) {
+          if(*(WORD*)((char*)pData + i) == 0xFEFF) {
+			  sHead = *(WORD*)((char*)pData + i);
+			  i += 2;//跳过已经读取的包头，防止读取错误
+              break;
+		  }
+		}//解析包头
+
+        if (i + 4 + 2 + 2 > nSize) {//边界检查，用于确保从当前偏移 i 开始，数据缓冲区 pData 中至少有足够字节来解析后续的固定字段
+			nSize = 0;//用掉了0个字节，这个函数的输入是包的总长度，输出是用掉的字节数
+            return;
+        }//如果没有找到包头，解析失败，直接返回
+        
+		nLength = *(DWORD*)((char*)pData + i); i += 4;//数据长度
+		sCmd = *(WORD*)((char*)pData + i); i += 2;//命令字
+		if (i + nLength  > nSize) {//边界检查，用于确保从当前偏移 i 开始，数据缓冲区 pData 中至少有足够字节来解析后续的数据字段和校验和字段
+			nSize = 0;//用掉了0个字节，这个函数的输入是包的总长度，输出是用掉的字节数
+        }
+
+		sCmd = *(WORD*)(pData + i); i += 2;//命令字
+
+        if (nLength > 4) {//数据长度至少要大于4，才能包含命令字和校验和
+            strData.resize(nLength - 2 - 2);
+            memcpy((void*)strData.c_str(), (char*)pData + i, nLength - 2 - 2);
+			i += nLength - 2 - 2;//数据
+        }
+        sSum = *(WORD*)((char*)pData + i); i += 2;//校验和
+		WORD sum = 0;
+		for (size_t j = 0; j < strData.size(); j++) {//计算校验和
+			sum += BYTE(strData[i]) & 0xFF ;
+		}
+		if (sum = sSum) {//校验和正确
+            nSize = i;
+            return;
+        }
+		nSize = 0;//用掉了0个字节，解析失败
+    }
+	~Cpacket() {}
+    Cpacket& operator=(const Cpacket& pkt) {
+        if (this != &pkt) {
+            sHead = pkt.sHead;
+            nLength = pkt.nLength;
+            sCmd = pkt.sCmd;
+            strData = pkt.strData;
+            sSum = pkt.sSum;
+        }
+		return *this;
+    }
+
+public:
+	WORD sHead;//包头,固定位FEFF
+	DWORD nLength;//数据长度
+	WORD sCmd;//命令字
+	std::string strData;//数据
+	WORD sSum;//校验和
+};
 class CServerSocket
 {
 private:
@@ -48,6 +118,7 @@ private:
 
     SOCKET m_serv;
     SOCKET m_client;
+	Cpacket m_packet;
 
 public:
 
@@ -98,14 +169,28 @@ public:
         return true;
     }
 
+#define BUFFER_SIZE 4096
+
     int DealCommand() {
         if (m_client == -1) return false;
-        char Buffer[1024] = " ";
-
+        //char Buffer[1024] = " ";
+		auto Buffer = std::make_unique < char[]> (BUFFER_SIZE);
+		memset(Buffer.get(), 0, BUFFER_SIZE);
+        size_t index = 0;
         while (true) {
-            int len = recv(m_client, Buffer, sizeof(Buffer), 0);
+            int len = recv(m_client, Buffer.get() + index, BUFFER_SIZE - index, 0);
             if (len <= 0) return -1;
-        }
+			index += len;
+			len = index;
+			m_packet = Cpacket (reinterpret_cast<const BYTE*>(Buffer.get()), (size_t&)len);
+             
+            if (len > 0) {
+				memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
+				index -= len;
+                return m_packet.sCmd;
+            }
+        } 
+		return -1;
     }
 
     bool Send(const void* pData, size_t size) {
