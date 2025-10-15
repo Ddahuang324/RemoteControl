@@ -37,31 +37,24 @@ int main()
         } 
         else
         {
-            // TODO: 在此处为应用程序的行为编写代码。
-            //server;
-            // TODO: 在此处为应用程序的行为编写代码。
-			CServerSocket& server = CServerSocket::GetInstance();   
-            int count = 0;
-            if (server.initSocket()) {
+            try {
+                auto myPacketHandler = [](const Cpacket& packet) {
+                    
+                  std::wcout << L"Received packet - Cmd: " << packet.sCmd 
+                             << L", Length: " << packet.nLength 
+                             << L", Data Size: " << packet.data.size() 
+					         << L", Checksum: " << packet.sSum << std::endl;
+                    // 这里可以添加更多处理逻辑
 
-                while (true){
-                    if (server.AcceptClient()) {
-                        server.DealCommand();
-                    }
-                    else {
-                        if (count >= 3) {
-                            MessageBox(NULL, L"AcceptClient 失败", L"错误", MB_OK);
-                        }
-                        exit(0);
-                    }
-                }
-          
-			}
-            else {
-                MessageBox(NULL, L"initSocket 失败,初始化异常", L"错误", MB_OK);
-                exit(0);
+					};
+                CServerSocket serverSocket(12345); // 监听端口12345
+                serverSocket.Run(myPacketHandler);
             }
-               
+            catch (const std::exception& ex) {
+				std::cerr << "Exception: " << ex.what() << std::endl;
+				return  1;
+          }
+			return 0;
         }
     }
     else
