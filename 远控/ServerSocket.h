@@ -31,7 +31,7 @@ public:
         
 		nLength = *(DWORD*)((char*)pData + i); i += 4;//数据长度
 		sCmd = *(WORD*)((char*)pData + i); i += 2;//命令字
-		if (i + nLength  > nSize) {//边界检查，用于确保从当前偏移 i 开始，数据缓冲区 pData 中至少有足够字节来解析后续的数据字段和校验和字段
+		if (i + (nLength -2 -2) + 2  > nSize) {//边界检查，用于确保从当前偏移 i 开始，数据缓冲区 pData 中至少有足够字节来解析后续的数据字段和校验和字段
 			nSize = 0;//用掉了0个字节，这个函数的输入是包的总长度，输出是用掉的字节数
         }
 
@@ -45,7 +45,7 @@ public:
         sSum = *(WORD*)((char*)pData + i); i += 2;//校验和
 		WORD sum = 0;
 		for (size_t j = 0; j < strData.size(); j++) {//计算校验和
-			sum += BYTE(strData[i]) & 0xFF ;
+			sum += BYTE(strData[j]) & 0xFF ;
 		}
 		if (sum = sSum) {//校验和正确
             nSize = i;
