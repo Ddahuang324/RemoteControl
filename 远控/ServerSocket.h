@@ -2,10 +2,20 @@
 #include "pch.h"
 #include "framework.h"
 
-
 class Cpacket {
 public:
 	Cpacket() :sHead(0), nLength(0), sCmd(0), sSum(0) {}
+    Cpacket(WORD nCmd, const BYTE* pData, size_t nSize) {
+		sHead = 0xFEFF;
+		nLength = nSize + 2 + 2;//数据长度=数据+命令字+校验和
+		sCmd = nCmd;
+        strData.resize(nSize);
+		memcpy((void*)strData.c_str(), pData, nSize);
+		sSum = 0;
+        for (size_t j = 0; j < strData.size(); j++) {//计算校验和
+            sSum += BYTE(strData[j]) & 0xFF;
+        }
+    }
     Cpacket(const Cpacket& pkt) {
 		sHead = pkt.sHead;
 		nLength = pkt.nLength;
@@ -33,9 +43,8 @@ public:
 		sCmd = *(WORD*)((char*)pData + i); i += 2;//命令字
 		if (i + (nLength -2 -2) + 2  > nSize) {//边界检查，用于确保从当前偏移 i 开始，数据缓冲区 pData 中至少有足够字节来解析后续的数据字段和校验和字段
 			nSize = 0;//用掉了0个字节，这个函数的输入是包的总长度，输出是用掉的字节数
+            return;
         }
-
-		sCmd = *(WORD*)(pData + i); i += 2;//命令字
 
         if (nLength > 4) {//数据长度至少要大于4，才能包含命令字和校验和
             strData.resize(nLength - 2 - 2);
@@ -47,7 +56,7 @@ public:
 		for (size_t j = 0; j < strData.size(); j++) {//计算校验和
 			sum += BYTE(strData[j]) & 0xFF ;
 		}
-		if (sum = sSum) {//校验和正确
+		if (sum == sSum) {//校验和正确
             nSize = i;
             return;
         }
@@ -65,13 +74,30 @@ public:
 		return *this;
     }
 
+    int Size() {//包数据大小
+		return nLength + 2 + 4;
+    }
+	const char* Data() {//包数据指针
+		strOut.resize(nLength + 6);
+		BYTE* pData = (BYTE*)strOut.c_str();
+		*(WORD*)pData = sHead; pData += 2;
+		*(DWORD*)pData = nLength; pData += 4;
+		*(WORD*)pData = sCmd; pData += 2;
+        memcpy(pData, strData.c_str(), strData.size()); pData += strData.size();
+		*(WORD*)pData = sSum;
+        
+		return strOut.c_str();
+    }
 public:
 	WORD sHead;//包头,固定位FEFF
 	DWORD nLength;//数据长度
 	WORD sCmd;//命令字
 	std::string strData;//数据
 	WORD sSum;//校验和
+
+	std::string strOut;//包的数据，用于调试
 };
+
 class CServerSocket
 {
 private:
@@ -197,4 +223,8 @@ public:
         if (m_client == -1) return false;
         return send(m_client, (const char*)pData, size, 0) > 0;
     }
+    bool Send(Cpacket& pkt) {
+        if (m_client == -1) return false;
+		return send(m_client,  pkt.Data(), pkt.Size(), 0) > 0;
+	}
 };

@@ -5,6 +5,7 @@
 #include "framework.h"
 #include "RemoteControl_server.h"
 #include "ServerSocket.h"
+#include "direct.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -20,56 +21,75 @@ CWinApp theApp;
 
 using namespace std;
 
-int main()
-{
-    int nRetCode = 0;
+void Dump(const BYTE* pData, size_t nSize) {
+    std::string strOut;
+    for (size_t i = 0; i < nSize; i++) {
+        char buf[8] = "";
+        if (i > 0 && i % 16 == 0) {
+            strOut += "\n";
+        }
+        snprintf(buf, sizeof(buf), "%02X ", pData[i] & 0xFF);
+        strOut += buf;
+    }
+    strOut += "\n";
+    OutputDebugStringA(strOut.c_str());
+}
 
-    HMODULE hModule = ::GetModuleHandle(nullptr);
+int MakeDriverInfo() {
+    std::string result;
 
-    if (hModule != nullptr)
-    {
-        // 初始化 MFC 并在失败时显示错误
-        if (!AfxWinInit(hModule, nullptr, ::GetCommandLine(), 0))
-        {
-            // TODO: 在此处为应用程序的行为编写代码。
-            wprintf(L"错误: MFC 初始化失败\n");
-            nRetCode = 1;
-        } 
-        else
-        {
-            // TODO: 在此处为应用程序的行为编写代码。
-            //server;
-            // TODO: 在此处为应用程序的行为编写代码。
-			CServerSocket& server = CServerSocket::GetInstance();   
-            int count = 0;
-            if (server.initSocket()) {
-
-                while (true){
-                    if (server.AcceptClient()) {
-                        server.DealCommand();
-                    }
-                    else {
-                        if (count >= 3) {
-                            MessageBox(NULL, L"AcceptClient 失败", L"错误", MB_OK);
-                        }
-                        exit(0);
-                    }
-                }
-          
-			}
-            else {
-                MessageBox(NULL, L"initSocket 失败,初始化异常", L"错误", MB_OK);
-                exit(0);
-            }
-               
+    // 使用位掩码一次性枚举 A:~Z:
+    DWORD mask = GetLogicalDrives();
+    for (int i = 0; i < 26; ++i) {
+        if (mask & (1u << i)) {
+            if (!result.empty()) result += ",";
+            result += char('A' + i);
         }
     }
-    else
-    {
-        // TODO: 更改错误代码以符合需要
-        wprintf(L"错误: GetModuleHandle 失败\n");
-        nRetCode = 1;
-    }
 
-    return nRetCode;
+    Cpacket pack(1, reinterpret_cast<const BYTE*>(result.data()), result.size());
+    Dump(reinterpret_cast<const BYTE*>(pack.Data()), pack.Size());
+    //CServerSocket::GetInstance().Send(pack); 
+    return 0;
 }
+    int main()
+    {
+        int nRetCode = 0;
+
+        HMODULE hModule = ::GetModuleHandle(nullptr);
+
+        if (hModule != nullptr)
+        {
+            // 初始化 MFC 并在失败时显示错误
+            if (!AfxWinInit(hModule, nullptr, ::GetCommandLine(), 0))
+            {
+                // TODO: 在此处为应用程序的行为编写代码。
+                wprintf(L"错误: MFC 初始化失败\n");
+                nRetCode = 1;
+            }
+            else
+            {
+                // TODO: 在此处为应用程序的行为编写代码。
+                //server;
+                // TODO: 在此处为应用程序的行为编写代码。
+            /*
+            *
+            */
+                int nCmd = 1;
+                switch (nCmd) {
+                case 1:
+                    MakeDriverInfo();
+                    break;
+                }
+              
+            }
+        }
+        else
+        {
+            // TODO: 更改错误代码以符合需要
+            wprintf(L"错误: GetModuleHandle 失败\n");
+            nRetCode = 1;
+        }
+
+        return nRetCode;
+        }
