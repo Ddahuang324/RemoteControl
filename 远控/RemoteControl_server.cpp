@@ -6,6 +6,24 @@
 #include "RemoteControl_server.h"
 #include "ServerSocket.h"
 #include "direct.h"
+#include "io.h"
+#include <list>
+
+
+typedef struct file_info {
+    file_info() {
+        isValid = 0;
+		isDir = 0;
+		hasNext = true;
+		memset(szFileName, 0, sizeof(szFileName));
+    }
+
+	bool isValid; //是否有效
+    bool isDir; //是目录还是文件
+	char szFileName[256];//文件名
+	bool hasNext;//是否有下一个
+    
+}FILEINFO, * PFILEINFO;
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -52,6 +70,53 @@ int MakeDriverInfo() {
     //CServerSocket::GetInstance().Send(pack); 
     return 0;
 }
+
+int MakeDirectoryInfo() {
+    std::string path;
+    std::list<FILEINFO>listFileInfo;
+    if (CServerSocket::GetInstance().GetFilePath(path) == false) {
+        OutputDebugString(_T("当前的命令不是文件获取列表，命令解析错误"));
+        return -1;
+    }
+    if (_chdir(path.c_str()) != 0) {
+        FILEINFO finfo;
+        finfo.isValid = true;
+        finfo.isDir = true;
+        finfo.hasNext = false;
+        memcpy(finfo.szFileName, path.c_str(), path.size());
+        //listFileInfo.push_back(finfo);
+        Cpacket pack(2, (BYTE*) & finfo, sizeof(finfo));
+        CServerSocket::GetInstance().Send(pack);
+        OutputDebugString(_T("没有权限，访问目录"));
+        return -2;
+    }
+
+    _finddata_t fdata;
+    int hfind = 0;
+    if ((hfind =_findfirst("*", &fdata)) == -1) {
+        OutputDebugString(_T("没有找到任何文件"));
+        return -3;
+    }
+
+
+    do {
+        FILEINFO finfo; 
+		finfo.isDir = (fdata.attrib & _A_SUBDIR) != 0;
+        memcpy(finfo.szFileName, fdata.name, strlen(fdata.name));
+        //listFileInfo.push_back(finfo);
+        Cpacket pack(2, (BYTE*)&finfo, sizeof(finfo));
+        CServerSocket::GetInstance().Send(pack);
+        //返回值处理？
+    } while (!_findnext(hfind, &fdata));
+
+	FILEINFO finfo;
+	finfo.hasNext = false;
+
+    Cpacket pack(2, (BYTE*)&finfo, sizeof(finfo));
+    CServerSocket::GetInstance().Send(pack);
+
+    return 0;
+}
     int main()
     {
         int nRetCode = 0;
@@ -80,7 +145,11 @@ int MakeDriverInfo() {
                 case 1:
                     MakeDriverInfo();
                     break;
+                case 2:
+                    MakeDirectoryInfo();
+                    break;
                 }
+               
               
             }
         }

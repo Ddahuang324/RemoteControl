@@ -227,4 +227,12 @@ public:
         if (m_client == -1) return false;
 		return send(m_client,  pkt.Data(), pkt.Size(), 0) > 0;
 	}
+
+    bool GetFilePath(std::string& strPath) {
+        if (m_packet.sCmd == 2) {//只有当命令== 2 时 ，才是获取文件路径的命令
+            strPath = m_packet.strData;
+			return true;
+        }
+		return false;
+	}
 };
