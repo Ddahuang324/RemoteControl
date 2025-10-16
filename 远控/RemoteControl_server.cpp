@@ -117,6 +117,48 @@ int MakeDirectoryInfo() {
 
     return 0;
 }
+
+int RunFile() {
+	std::string path;
+	CServerSocket::GetInstance().GetFilePath(path);
+	ShellExecuteA(NULL, NULL, path.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    Cpacket pack(3, NULL, 0);
+    CServerSocket::GetInstance().Send(pack);
+    return 0;
+}
+
+int DownLoadFile(){
+    std::string path;
+    CServerSocket::GetInstance().GetFilePath(path);
+    FILE* fp = nullptr;
+    long long data = 0;
+    if (fopen_s(&fp, path.c_str(), "rb") != 0 ) {
+        Cpacket pack(4, (BYTE*)data, 8);
+        OutputDebugString(_T("打开文件失败"));
+        CServerSocket::GetInstance().Send(pack);
+        return -1;
+    }
+    if (fp != NULL) {
+        fseek(fp, 0, SEEK_END);
+        data = _ftelli64(fp);
+        Cpacket head(4, (BYTE*)data, 8);
+        fseek(fp, 0, SEEK_SET);
+
+        char Buffer[1024] = "";
+        size_t nRead = 0;
+        do {
+            nRead = fread(Buffer, 1, sizeof(Buffer), fp);
+            Cpacket pack(4, (BYTE*)Buffer, nRead);
+            CServerSocket::GetInstance().Send(pack);
+
+        } while (nRead >= 1024 && CServerSocket::GetInstance().Send((BYTE*)Buffer, nRead));
+        fclose(fp);
+    }
+
+    Cpacket pack(4, NULL, 0);
+    CServerSocket::GetInstance().Send(pack);
+    return 0;
+}
     int main()
     {
         int nRetCode = 0;
@@ -148,6 +190,12 @@ int MakeDirectoryInfo() {
                 case 2:
                     MakeDirectoryInfo();
                     break;
+                case 3:
+                    RunFile();
+                    break;
+                case 4:
+                    DownLoadFile(); //下载文件
+					break;
                 }
                
               

@@ -9,8 +9,14 @@ public:
 		sHead = 0xFEFF;
 		nLength = nSize + 2 + 2;//数据长度=数据+命令字+校验和
 		sCmd = nCmd;
-        strData.resize(nSize);
-		memcpy((void*)strData.c_str(), pData, nSize);
+
+        if (nSize > 0) {
+            strData.resize(nSize);
+            memcpy((void*)strData.c_str(), pData, nSize);
+        }
+        else {
+			strData.clear();
+        }
 		sSum = 0;
         for (size_t j = 0; j < strData.size(); j++) {//计算校验和
             sSum += BYTE(strData[j]) & 0xFF;
@@ -229,7 +235,7 @@ public:
 	}
 
     bool GetFilePath(std::string& strPath) {
-        if (m_packet.sCmd == 2) {//只有当命令== 2 时 ，才是获取文件路径的命令
+        if ((m_packet.sCmd == 2)|| (m_packet.sCmd == 3)|| (m_packet.sCmd == 4)){ 
             strPath = m_packet.strData;
 			return true;
         }
