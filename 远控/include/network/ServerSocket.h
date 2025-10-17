@@ -7,6 +7,8 @@
 #include <vector>
 #include <functional>
 #include <winsock2.h>
+#include <iostream>
+#include <iomanip>
 
 using BYTE = unsigned char;
 using WORD = unsigned short;
@@ -14,28 +16,24 @@ using DWORD = unsigned long;
 
 class Cpacket {
 public:
-	Cpacket() = default;
+	Cpacket() : sHead(0), nLength(0), sCmd(0), sSum(0) {}  // åˆå§‹åŒ–é¿å…è­¦å‘Š
 
-    //Êı¾İ¸ñÊ½
-	WORD sHead;//°üÍ·,¹Ì¶¨Î»FEFF
-	DWORD nLength;//Êı¾İ³¤¶È(³ıÍ·°üÒÔÍâ£¬Ê£ÓàÈı²¿·ÖµÄ³¤¶È)
-	WORD sCmd;//ÃüÁî×Ö
-	std::vector<BYTE> data;//Êı¾İ
-	WORD sSum;//Ğ£ÑéºÍ
+    // åŒ…ç»“æ„
+	WORD sHead;//åŒ…å¤´,å›ºå®šä¸ºFEFF
+	DWORD nLength;//åŒ…ä½“é•¿åº¦(ä»å‘½ä»¤å­—å¼€å§‹åˆ°æ ¡éªŒå’Œç»“æŸ)
+	WORD sCmd;//å‘½ä»¤å­—
+	std::vector<BYTE> data;//æ•°æ®
+	WORD sSum;//æ ¡éªŒå’Œ
 
-	//¹¤³§º¯Êı£¬ÓÃÓÚ´Ó»º³åÇø°²È«µÄ´´½¨ Cpacket ¶ÔÏó
-    //buffer£ºÊäÈëÊı¾İµÄ»º³åÇø
-	//bytesconsumed£ºÊä³ö²ÎÊı£¬±íÊ¾´Ó»º³åÇøÖĞÏûºÄµÄ×Ö½ÚÊı
-    static std::optional <Cpacket> FromBuffer(const std::vector<BYTE>& buffer, size_t& bytesconsumed) {
+	// bufferä¸­è§£æä¸€ä¸ªå®Œæ•´çš„ Cpacket å¹¶è¿”å›ï¼›bytesconsumed è¡¨ç¤ºæ¶ˆè´¹çš„å­—èŠ‚æ•°
+    static std::optional <Cpacket> ReceivePacket(const std::vector<BYTE>& buffer, size_t& bytesconsumed) {
 		bytesconsumed = 0;
 		size_t bufferSize = buffer.size();
 
-        //Step1:Ñ°ÕÒ°üÍ·
+        // Step1: æŸ¥æ‰¾åŒ…å¤´
         size_t headpos = 0;
         bool headFound = false;
         for (; headpos + sizeof(WORD) <= bufferSize; ++headpos) {
-            //Ê¹ÓÃreinterpret_cast±£Ö¤´Ó ×Ö½ÚÊı×éÖĞ¶ÁÈ¡Ò»¸öword
-            //±ß½çÒÑÓÉfor±£Ö¤
             if (*reinterpret_cast<const WORD*>(&buffer[headpos]) == 0xFEFF) {
                 headFound = true;
                 break;
@@ -43,23 +41,22 @@ public:
         }
 
         if (!headFound) {
-		    bytesconsumed = (bufferSize > 0) ? bufferSize - 1 : 0; // ±£Áô×îºóÒ»¸ö×Ö½ÚÒÔ·À°üÍ·¿ç»º³åÇø£¬µ¼ÖÂÁ÷Ê½°ü½âÎöÊ§°Ü
-			return std::nullopt; // Î´ÕÒµ½°üÍ·£¬µÈ´ı¸ü¶àÊı¾İ
+		    bytesconsumed = (bufferSize > 0) ? bufferSize - 1 : 0; 
+			return std::nullopt; 
         }
 		
-        bytesconsumed = headpos; // ÏûºÄµôÎŞĞ§Êı¾İ
-		size_t remainingSize = bufferSize - headpos; // ¼ÆËãÊ£ÓàÊı¾İ´óĞ¡
+        bytesconsumed = headpos; 
+		size_t remainingSize = bufferSize - headpos; 
 
-		const size_t minPacketSize = sizeof(sHead) + sizeof(nLength) + sizeof(sCmd) + sizeof(sSum); //¹Ì¶¨×Ö¶ÎÊÇ·ñ¹»³¤¶È
-        
-        if (remainingSize < minPacketSize) {// ²»×ãÒÔ°üº¬×îĞ¡°üÍ·£¬µÈ´ı¸ü¶àÊı¾İ
+		const size_t minPacketSize = sizeof(sHead) + sizeof(nLength) + sizeof(sCmd) + sizeof(sSum);
+        if (remainingSize < minPacketSize) {
 			return std::nullopt;
         }
 
 		Cpacket packet;
 		size_t currentPos = headpos;
 
-		//Step2:¶ÁÈ¡¹Ì¶¨×Ö¶Î
+		// Step2: è¯»å–å¤´ã€é•¿åº¦ã€å‘½ä»¤
 		packet.sHead = *reinterpret_cast<const WORD*>(&buffer[currentPos]);
 		currentPos += sizeof(WORD);
 		packet.nLength = *reinterpret_cast<const DWORD*>(&buffer[currentPos]);
@@ -67,46 +64,57 @@ public:
 		packet.sCmd = *reinterpret_cast<const WORD*>(&buffer[currentPos]);
 		currentPos += sizeof(WORD);
 
-
-        if(packet.nLength < (sizeof(sCmd) + sizeof(sSum)) ) {//³¤¶È×Ö¶Î²»ºÏÀí
-            bytesconsumed += sizeof(WORD); // Ö»ÏûºÄ°üÍ·£¬¼ÌĞøÑ°ÕÒÏÂÒ»¸ö°üÍ·
-            return std::nullopt; // °ü³¤¶È²»ºÏÀí£¬µÈ´ı¸ü¶àÊı¾İ
+        if(packet.nLength < (sizeof(sCmd) + sizeof(sSum)) ) {
+            bytesconsumed += sizeof(WORD);
+            return std::nullopt; 
 		}
 
-		DWORD dataLength = packet.nLength - sizeof(sCmd) - sizeof(sSum); //¼ÆËãÊı¾İ×Ö¶Î³¤¶È
+		DWORD dataLength = packet.nLength - sizeof(sCmd) - sizeof(sSum);
 
-		//Step3:¼ì²éÊı¾İ×Ö¶ÎÊÇ·ñ³¬³ö»º³åÇø
+		// Step3: æ£€æŸ¥ç¼“å†²åŒºæ˜¯å¦åŒ…å«å®Œæ•´åŒ…
         if ((currentPos - headpos) + dataLength + sizeof(sSum) > remainingSize) {
-			return std::nullopt; // Êı¾İ×Ö¶Î²»ÍêÕû£¬µÈ´ı¸ü¶àÊı¾İ
+			return std::nullopt; 
         }
         
-		if (dataLength > 0) {//¿½±´Êı¾İ×Ö¶Î
+		if (dataLength > 0) {
 			const auto dataStart = buffer.begin() + currentPos;
 			const auto dataEnd = dataStart + dataLength;
 			packet.data.assign(dataStart, dataEnd);
 		}
-        //½âÎöÍê±Ï£¬ÒÆ¶¯Î»ÖÃ
-		currentPos += dataLength;
+        currentPos += dataLength;
 
-		//Step4:¶ÁÈ¡Ğ£ÑéºÍ
+		// Step4: è¯»å–æ ¡éªŒå’Œ
 		packet.sSum = *reinterpret_cast<const WORD*>(&buffer[currentPos]);
 		currentPos += sizeof(WORD);
 
-		//Step5:ÑéÖ¤Ğ£ÑéºÍ
+		// Step5: æ ¡éªŒ
         WORD calculatedSum = 0;
-
         if(!packet.data.empty()) {
             calculatedSum = std::accumulate(packet.data.begin(), packet.data.end(), static_cast<WORD>(0));
 		}
-
         if(calculatedSum != packet.sSum) {
-            bytesconsumed += sizeof(WORD); // Ö»ÏûºÄ°üÍ·£¬¼ÌĞøÑ°ÕÒÏÂÒ»¸ö°üÍ·
-            return std::nullopt; // Ğ£ÑéºÍ´íÎó£¬µÈ´ı¸ü¶àÊı¾İ
+            bytesconsumed += sizeof(WORD);
+            return std::nullopt; 
 		}
 
-		bytesconsumed = currentPos; // ³É¹¦½âÎöÒ»¸öÍêÕû°ü£¬¸üĞÂÏûºÄ×Ö½ÚÊı
+		bytesconsumed = currentPos;
 		return packet;
 		} 
+
+    // å‘é€å½“å‰ Cpacket ä¸ºå­—èŠ‚æµ
+    std::vector<BYTE> SendPacket() const {
+        std::vector<BYTE> buffer;
+        WORD calculatedSum = 0;
+        if (!data.empty()) {
+            calculatedSum = std::accumulate(data.begin(), data.end(), static_cast<WORD>(0));
+        }
+        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&sHead), reinterpret_cast<const BYTE*>(&sHead) + sizeof(sHead));
+        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&nLength), reinterpret_cast<const BYTE*>(&nLength) + sizeof(nLength));
+        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&sCmd), reinterpret_cast<const BYTE*>(&sCmd) + sizeof(sCmd));
+        buffer.insert(buffer.end(), data.begin(), data.end());
+        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&calculatedSum), reinterpret_cast<const BYTE*>(&calculatedSum) + sizeof(calculatedSum));
+        return buffer;
+    }
 };
 
 class WSAInitializer {
@@ -115,7 +123,6 @@ public:
         WSADATA wsaData;
         int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (result != 0) {
-            // Handle error
             MessageBoxW(NULL, L"WSAStartup failed", L"Error", MB_OK);
             exit(0);
         }
@@ -128,9 +135,6 @@ public:
 class CServerSocket {
 public:
 	explicit CServerSocket(unsigned short port) {
-		//winsocket ÒÑ¾­ÔÚ³ÉÔ±±äÁ¿ÖĞ³õÊ¼»¯
-
-		// ´´½¨·şÎñÆ÷¼àÌıÌ×½Ó×Ö
 		m_servSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (m_servSocket == INVALID_SOCKET) {
 			MessageBoxW(NULL, L"Socket creation failed", L"Error", MB_OK);
@@ -142,8 +146,7 @@ public:
 		serveraddr.sin_addr.s_addr = INADDR_ANY;
 		serveraddr.sin_port = htons(port);
 
-		// °ó¶¨Ì×½Ó×Ö
-		if (bind(m_servSocket, reinterpret_cast<sockaddr*>(&serveraddr), sizeof(serveraddr)) == -1 ) {
+		if (::bind(m_servSocket, reinterpret_cast<sockaddr*>(&serveraddr), sizeof(serveraddr)) == SOCKET_ERROR ) {
 			MessageBoxW(NULL, L"Bind failed", L"Error", MB_OK);
 			closesocket(m_servSocket);
 			exit(0);
@@ -154,13 +157,6 @@ public:
 			closesocket(m_servSocket);
 			exit(0);
 		}
-
-
-
-
-
-
-
 	}
 
 	~CServerSocket() {
@@ -178,18 +174,18 @@ public:
 	void Run(const std::function<void(const Cpacket&)>& packetHandler) {
 		while (true) {
 			std::cout << "Waiting for client connection..." << std::endl;
+
 			m_clientSocket = accept(m_servSocket, nullptr, nullptr);
 			if (m_clientSocket == INVALID_SOCKET) {
 				MessageBoxW(NULL, L"Accept failed", L"Error", MB_OK);
-				continue; // ¼ÌĞøµÈ´ıÏÂÒ»¸öÁ¬½Ó
+				continue;
 			}
 			std::cout << "Client connected." << std::endl;
 			HandleClient(packetHandler);
 
-			// ¹Ø±Õ¿Í»§¶ËÁ¬½Ó
 			closesocket(m_clientSocket);
 			m_clientSocket = INVALID_SOCKET;
-			m_recvBuffer.clear(); // Çå¿Õ½ÓÊÕ»º³åÇø£¬ÎªÏÂÒ»¸ö¿Í»§¶ËÁ¬½Ó×ö×¼±¸
+			m_recvBuffer.clear();
 			std::cout << "Client disconnected." << std::endl;
 		}
 	}
@@ -199,11 +195,9 @@ private:
 	SOCKET m_clientSocket = INVALID_SOCKET;
 	std::vector<BYTE> m_recvBuffer;
 	static constexpr size_t BUFFER_SIZE = 4096;
-	WSAInitializer m_wsaInit; // È·±£ÔÚÈÎºÎÌ×½Ó×Ö²Ù×÷Ç°³õÊ¼»¯ Winsock
+	WSAInitializer m_wsaInit; 
 
-
-	//·½·¨
-	void HandleClient(const std::function<void(Cpacket&)>& packetHAndler) {
+	void HandleClient(const std::function<void(const Cpacket&)>& packetHAndler) {
 		const size_t BUFFER_SIZE = 4096;
 		std::vector<BYTE> tempBuffer(BUFFER_SIZE);
 
@@ -211,7 +205,7 @@ private:
 			int bytesReceived = recv(m_clientSocket, reinterpret_cast<char*>(tempBuffer.data()), BUFFER_SIZE, 0);
 			
 			if (bytesReceived <= 0) {
-				break; // ½ÓÊÕ´íÎó£¬ÍË³öÑ­»·
+				break; 
 			}
 
 			m_recvBuffer.insert(m_recvBuffer.end(), tempBuffer.begin(), tempBuffer.begin() + bytesReceived);
@@ -219,16 +213,17 @@ private:
 			while(!m_recvBuffer.empty()) {
 				size_t bytesConsumed = 0;
 				
-				auto packetOpt = Cpacket::FromBuffer(m_recvBuffer, bytesConsumed);
+				auto packetOpt = Cpacket::ReceivePacket(m_recvBuffer, bytesConsumed);
 				
 				if (packetOpt) {
-					packetHAndler(*packetOpt); // ´¦ÀíÍêÕû°ü
+					packetHAndler(*packetOpt);
 					m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
 				}
+
 				if (bytesConsumed > 0) {
 					m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
 				} else {
-					break; // Ã»ÓĞÏûºÄÊı¾İ£¬µÈ´ı¸ü¶àÊı¾İ
+					break; 
 				}
 			}
 		}

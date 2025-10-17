@@ -40,34 +40,40 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ServerSocket.h">
+    <ClInclude Include="include\network\ServerSocket.h">
       <Filter>include\network</Filter>
     </ClInclude>
-    <ClInclude Include="RemoteControl_server.h">
+    <ClInclude Include="include\utils\RemoteControl_server.h">
+      <Filter>include\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Resource.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="Resource.h">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
+    <ClInclude Include="include\pch\pch.h">
       <Filter>include\pch</Filter>
     </ClInclude>
-    <ClInclude Include="framework.h">
+    <ClInclude Include="include\pch\framework.h">
       <Filter>include\pch</Filter>
     </ClInclude>
-    <ClInclude Include="targetver.h">
+    <ClInclude Include="include\pch\targetver.h">
       <Filter>include\pch</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core\Enities.h">
+      <Filter>include\core</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pch.cpp">
+    <ClCompile Include="src\pch\pch.cpp">
       <Filter>src\pch</Filter>
     </ClCompile>
-    <ClCompile Include="RemoteControl_server.cpp">
+    <ClCompile Include="src\RemoteControl_server.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="ServerSocket.cpp">
+    <ClCompile Include="src\network\ServerSocket.cpp">
       <Filter>src\network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\fileSystem.cpp">
+      <Filter>src\core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

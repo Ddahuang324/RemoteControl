@@ -1,10 +1,11 @@
-﻿// 远控.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
+// 远控.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
 //
 
 #include "pch.h"
 #include "framework.h"
 #include "RemoteControl_server.h"
 #include "ServerSocket.h"
+#include <sstream>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -19,6 +20,21 @@
 CWinApp theApp;
 
 using namespace std;
+
+void TestPacket() {
+    Cpacket packet;
+    packet.sHead = 0xFEFF;
+    packet.sCmd = 0x1234; // 示例命令字
+    packet.data = {0x01, 0x02, 0x03, 0x04}; // 示例数据
+    packet.nLength = sizeof(packet.sCmd) + packet.data.size() + sizeof(packet.sSum); // 计算 nLength
+    auto buffer = packet.SendPacket();
+    std::stringstream ss;
+    ss << "Packet in hex: ";
+    for (auto b : buffer) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
+    }
+    OutputDebugStringA(ss.str().c_str());
+}
 
 int main()
 {
@@ -38,28 +54,27 @@ int main()
         else
         {
             try {
+                CServerSocket serverSocket(12345); // 监听端口12345
+
                 auto myPacketHandler = [](const Cpacket& packet) {
-                    
                   std::wcout << L"Received packet - Cmd: " << packet.sCmd 
                              << L", Length: " << packet.nLength 
                              << L", Data Size: " << packet.data.size() 
-					         << L", Checksum: " << packet.sSum << std::endl;
-                    // 这里可以添加更多处理逻辑
-
-					};
-                CServerSocket serverSocket(12345); // 监听端口12345
+                             << L", Checksum: " << packet.sSum << std::endl;
+                  // TODO: 根据命令字处理不同请求
+                };
+                
                 serverSocket.Run(myPacketHandler);
             }
             catch (const std::exception& ex) {
-				std::cerr << "Exception: " << ex.what() << std::endl;
-				return  1;
-          }
-			return 0;
+                std::cerr << "Exception: " << ex.what() << std::endl;
+                return  1;
+            }
+            return 0;
         }
     }
     else
     {
-        // TODO: 更改错误代码以符合需要
         wprintf(L"错误: GetModuleHandle 失败\n");
         nRetCode = 1;
     }
