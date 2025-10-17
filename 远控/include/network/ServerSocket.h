@@ -18,7 +18,9 @@ class Cpacket {
 public:
 	Cpacket() : sHead(0), nLength(0), sCmd(0), sSum(0) {}  // 初始化避免警告
 
-    // 包结构
+	Cpacket(WORD cmd, const std::vector<BYTE>& packetData) : sHead(0xFEFF), sCmd(cmd), data(packetData), sSum(0) {
+		nLength = sizeof(sCmd) + data.size() + sizeof(sSum);
+	}
 	WORD sHead;//包头,固定为FEFF
 	DWORD nLength;//包体长度(从命令字开始到校验和结束)
 	WORD sCmd;//命令字
@@ -26,7 +28,7 @@ public:
 	WORD sSum;//校验和
 
 	// buffer中解析一个完整的 Cpacket 并返回；bytesconsumed 表示消费的字节数
-    static std::optional <Cpacket> ReceivePacket(const std::vector<BYTE>& buffer, size_t& bytesconsumed) {
+    static std::optional <Cpacket> DeserializePacket(const std::vector<BYTE>& buffer, size_t& bytesconsumed) {
 		bytesconsumed = 0;
 		size_t bufferSize = buffer.size();
 
@@ -102,7 +104,7 @@ public:
 		} 
 
     // 发送当前 Cpacket 为字节流
-    std::vector<BYTE> SendPacket() const {
+    std::vector<BYTE> SerializePacket() const {
         std::vector<BYTE> buffer;
         WORD calculatedSum = 0;
         if (!data.empty()) {
@@ -168,6 +170,39 @@ public:
 		}
 	}
 	
+	void SendPacket(const Cpacket& packet) {
+		auto buffer = packet.SerializePacket();
+		send(m_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
+	}
+	
+	void SendErrorPacket(const std::string& errorMessage) {
+		std::vector<BYTE> errPayload(errorMessage.begin(), errorMessage.end());
+		Cpacket errPacket(CMD::CMD_ERROR, errPayload);
+		SendPacket(errPacket);
+	}
+	
+	std::optional<Cpacket> RecvPacket() {
+		while (true) {
+			size_t bytesConsumed = 0;
+			auto packetOpt = Cpacket::DeserializePacket(m_recvBuffer, bytesConsumed);
+			if (packetOpt) {
+				m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
+				return packetOpt;
+			}
+			if (bytesConsumed > 0) {
+				m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
+				continue;
+			}
+			// 接收更多数据
+			std::vector<BYTE> tempBuffer(BUFFER_SIZE);
+			int bytesReceived = recv(m_clientSocket, reinterpret_cast<char*>(tempBuffer.data()), BUFFER_SIZE, 0);
+			if (bytesReceived <= 0) {
+				return std::nullopt;
+			}
+			m_recvBuffer.insert(m_recvBuffer.end(), tempBuffer.begin(), tempBuffer.begin() + bytesReceived);
+		}
+	}
+	
 	CServerSocket(const CServerSocket&) = delete;
 	CServerSocket& operator=(const CServerSocket&) = delete;
 
@@ -197,35 +232,14 @@ private:
 	static constexpr size_t BUFFER_SIZE = 4096;
 	WSAInitializer m_wsaInit; 
 
+	
 	void HandleClient(const std::function<void(const Cpacket&)>& packetHAndler) {
-		const size_t BUFFER_SIZE = 4096;
-		std::vector<BYTE> tempBuffer(BUFFER_SIZE);
-
 		while (true) {
-			int bytesReceived = recv(m_clientSocket, reinterpret_cast<char*>(tempBuffer.data()), BUFFER_SIZE, 0);
-			
-			if (bytesReceived <= 0) {
-				break; 
+			auto packetOpt = RecvPacket();
+			if (!packetOpt) {
+				break; // 连接关闭或错误
 			}
-
-			m_recvBuffer.insert(m_recvBuffer.end(), tempBuffer.begin(), tempBuffer.begin() + bytesReceived);
-
-			while(!m_recvBuffer.empty()) {
-				size_t bytesConsumed = 0;
-				
-				auto packetOpt = Cpacket::ReceivePacket(m_recvBuffer, bytesConsumed);
-				
-				if (packetOpt) {
-					packetHAndler(*packetOpt);
-					m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
-				}
-
-				if (bytesConsumed > 0) {
-					m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + bytesConsumed);
-				} else {
-					break; 
-				}
-			}
+			packetHAndler(*packetOpt);
 		}
 	}
 };

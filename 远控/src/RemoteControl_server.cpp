@@ -5,6 +5,8 @@
 #include "framework.h"
 #include "RemoteControl_server.h"
 #include "ServerSocket.h"
+#include "Enities.h"
+#include "fileSystem.h"
 #include <sstream>
 
 #ifdef _DEBUG
@@ -21,20 +23,7 @@ CWinApp theApp;
 
 using namespace std;
 
-void TestPacket() {
-    Cpacket packet;
-    packet.sHead = 0xFEFF;
-    packet.sCmd = 0x1234; // 示例命令字
-    packet.data = {0x01, 0x02, 0x03, 0x04}; // 示例数据
-    packet.nLength = sizeof(packet.sCmd) + packet.data.size() + sizeof(packet.sSum); // 计算 nLength
-    auto buffer = packet.SendPacket();
-    std::stringstream ss;
-    ss << "Packet in hex: ";
-    for (auto b : buffer) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
-    }
-    OutputDebugStringA(ss.str().c_str());
-}
+
 
 int main()
 {
@@ -56,12 +45,47 @@ int main()
             try {
                 CServerSocket serverSocket(12345); // 监听端口12345
 
-                auto myPacketHandler = [](const Cpacket& packet) {
+                auto myPacketHandler = [&serverSocket](const Cpacket& packet) {
                   std::wcout << L"Received packet - Cmd: " << packet.sCmd 
                              << L", Length: " << packet.nLength 
                              << L", Data Size: " << packet.data.size() 
                              << L", Checksum: " << packet.sSum << std::endl;
-                  // TODO: 根据命令字处理不同请求
+                  
+                  // 根据命令字处理不同请求
+                  switch (packet.sCmd) {
+                      case CMD::CMD_DRIVER_INFO: {
+                          std::string driveInfo = GetDriverInfo();
+                          std::vector<BYTE> data(driveInfo.begin(), driveInfo.end());
+                          Cpacket response(CMD::CMD_DRIVER_INFO, data);
+                          serverSocket.SendPacket(response);
+                          break;
+                      }
+                      case CMD::CMD_DIRECTORY_INFO: {
+                          if (!packet.data.empty()) {
+                              std::string path(packet.data.begin(), packet.data.end());
+                              DirectoryInfor(path, serverSocket);
+                          }
+                          break;
+                      }
+                      case CMD::CMD_RUN_FILE: {
+                          if (!packet.data.empty()) {
+                              std::string path(packet.data.begin(), packet.data.end());
+                              RunFile(path, serverSocket);
+                          }
+                          break;
+                      }
+                      case CMD::CMD_DOWNLOAD_FILE: {
+                          // TODO: 实现文件下载功能
+                          std::string errMsg = "Download file not implemented yet";
+                          serverSocket.SendErrorPacket(errMsg);
+                          break;
+                      }
+                      default: {
+                          std::string errMsg = "Unknown command";
+                          serverSocket.SendErrorPacket(errMsg);
+                          break;
+                      }
+                  }
                 };
                 
                 serverSocket.Run(myPacketHandler);
