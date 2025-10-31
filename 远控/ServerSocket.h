@@ -7,7 +7,7 @@ public:
 	Cpacket() :sHead(0), nLength(0), sCmd(0), sSum(0) {}
     Cpacket(WORD nCmd, const BYTE* pData, size_t nSize) {
 		sHead = 0xFEFF;
-		nLength = nSize + 2 + 2;//Êý¾Ý³¤¶È=Êý¾Ý+ÃüÁî×Ö+Ð£ÑéºÍ
+		nLength = nSize + 2 + 2;//ï¿½ï¿½ï¿½Ý³ï¿½ï¿½ï¿½=ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+Ð£ï¿½ï¿½ï¿½
 		sCmd = nCmd;
 
         if (nSize > 0) {
@@ -18,7 +18,7 @@ public:
 			strData.clear();
         }
 		sSum = 0;
-        for (size_t j = 0; j < strData.size(); j++) {//¼ÆËãÐ£ÑéºÍ
+        for (size_t j = 0; j < strData.size(); j++) {//ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½
             sSum += BYTE(strData[j]) & 0xFF;
         }
     }
@@ -35,38 +35,38 @@ public:
         for(; i < nSize; i++) {
           if(*(WORD*)((char*)pData + i) == 0xFEFF) {
 			  sHead = *(WORD*)((char*)pData + i);
-			  i += 2;//Ìø¹ýÒÑ¾­¶ÁÈ¡µÄ°üÍ·£¬·ÀÖ¹¶ÁÈ¡´íÎó
+			  i += 2;//ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½È¡ï¿½Ä°ï¿½Í·ï¿½ï¿½ï¿½ï¿½Ö¹ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
               break;
 		  }
-		}//½âÎö°üÍ·
+		}//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í·
 
-        if (i + 4 + 2 + 2 > nSize) {//±ß½ç¼ì²é£¬ÓÃÓÚÈ·±£´Óµ±Ç°Æ«ÒÆ i ¿ªÊ¼£¬Êý¾Ý»º³åÇø pData ÖÐÖÁÉÙÓÐ×ã¹»×Ö½ÚÀ´½âÎöºóÐøµÄ¹Ì¶¨×Ö¶Î
-			nSize = 0;//ÓÃµôÁË0¸ö×Ö½Ú£¬Õâ¸öº¯ÊýµÄÊäÈëÊÇ°üµÄ×Ü³¤¶È£¬Êä³öÊÇÓÃµôµÄ×Ö½ÚÊý
+        if (i + 4 + 2 + 2 > nSize) {//ï¿½ß½ï¿½ï¿½é£¬ï¿½ï¿½ï¿½ï¿½È·ï¿½ï¿½ï¿½Óµï¿½Ç°Æ«ï¿½ï¿½ i ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ý»ï¿½ï¿½ï¿½ï¿½ï¿½ pData ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ã¹»ï¿½Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¹Ì¶ï¿½ï¿½Ö¶ï¿½
+			nSize = 0;//ï¿½Ãµï¿½ï¿½ï¿½0ï¿½ï¿½ï¿½Ö½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½Ü³ï¿½ï¿½È£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
             return;
-        }//Èç¹ûÃ»ÓÐÕÒµ½°üÍ·£¬½âÎöÊ§°Ü£¬Ö±½Ó·µ»Ø
+        }//ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½Òµï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½Ö±ï¿½Ó·ï¿½ï¿½ï¿½
         
-		nLength = *(DWORD*)((char*)pData + i); i += 4;//Êý¾Ý³¤¶È
-		sCmd = *(WORD*)((char*)pData + i); i += 2;//ÃüÁî×Ö
-		if (i + (nLength -2 -2) + 2  > nSize) {//±ß½ç¼ì²é£¬ÓÃÓÚÈ·±£´Óµ±Ç°Æ«ÒÆ i ¿ªÊ¼£¬Êý¾Ý»º³åÇø pData ÖÐÖÁÉÙÓÐ×ã¹»×Ö½ÚÀ´½âÎöºóÐøµÄÊý¾Ý×Ö¶ÎºÍÐ£ÑéºÍ×Ö¶Î
-			nSize = 0;//ÓÃµôÁË0¸ö×Ö½Ú£¬Õâ¸öº¯ÊýµÄÊäÈëÊÇ°üµÄ×Ü³¤¶È£¬Êä³öÊÇÓÃµôµÄ×Ö½ÚÊý
+		nLength = *(DWORD*)((char*)pData + i); i += 4;//ï¿½ï¿½ï¿½Ý³ï¿½ï¿½ï¿½
+		sCmd = *(WORD*)((char*)pData + i); i += 2;//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		if (i + (nLength -2 -2) + 2  > nSize) {//ï¿½ß½ï¿½ï¿½é£¬ï¿½ï¿½ï¿½ï¿½È·ï¿½ï¿½ï¿½Óµï¿½Ç°Æ«ï¿½ï¿½ i ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ý»ï¿½ï¿½ï¿½ï¿½ï¿½ pData ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ã¹»ï¿½Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¶Îºï¿½Ð£ï¿½ï¿½ï¿½ï¿½Ö¶ï¿½
+			nSize = 0;//ï¿½Ãµï¿½ï¿½ï¿½0ï¿½ï¿½ï¿½Ö½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½Ü³ï¿½ï¿½È£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ãµï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
             return;
         }
 
-        if (nLength > 4) {//Êý¾Ý³¤¶ÈÖÁÉÙÒª´óÓÚ4£¬²ÅÄÜ°üº¬ÃüÁî×ÖºÍÐ£ÑéºÍ
+        if (nLength > 4) {//ï¿½ï¿½ï¿½Ý³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½4ï¿½ï¿½ï¿½ï¿½ï¿½Ü°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öºï¿½Ð£ï¿½ï¿½ï¿½
             strData.resize(nLength - 2 - 2);
             memcpy((void*)strData.c_str(), (char*)pData + i, nLength - 2 - 2);
-			i += nLength - 2 - 2;//Êý¾Ý
+			i += nLength - 2 - 2;//ï¿½ï¿½ï¿½ï¿½
         }
-        sSum = *(WORD*)((char*)pData + i); i += 2;//Ð£ÑéºÍ
+        sSum = *(WORD*)((char*)pData + i); i += 2;//Ð£ï¿½ï¿½ï¿½
 		WORD sum = 0;
-		for (size_t j = 0; j < strData.size(); j++) {//¼ÆËãÐ£ÑéºÍ
+		for (size_t j = 0; j < strData.size(); j++) {//ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½
 			sum += BYTE(strData[j]) & 0xFF ;
 		}
-		if (sum == sSum) {//Ð£ÑéºÍÕýÈ·
+		if (sum == sSum) {//Ð£ï¿½ï¿½ï¿½ï¿½ï¿½È·
             nSize = i;
             return;
         }
-		nSize = 0;//ÓÃµôÁË0¸ö×Ö½Ú£¬½âÎöÊ§°Ü
+		nSize = 0;//ï¿½Ãµï¿½ï¿½ï¿½0ï¿½ï¿½ï¿½Ö½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½
     }
 	~Cpacket() {}
     Cpacket& operator=(const Cpacket& pkt) {
@@ -80,10 +80,10 @@ public:
 		return *this;
     }
 
-    int Size() {//°üÊý¾Ý´óÐ¡
+    int Size() {//ï¿½ï¿½ï¿½ï¿½ï¿½Ý´ï¿½Ð¡
 		return nLength + 2 + 4;
     }
-	const char* Data() {//°üÊý¾ÝÖ¸Õë
+	const char* Data() {//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
 		strOut.resize(nLength + 6);
 		BYTE* pData = (BYTE*)strOut.c_str();
 		*(WORD*)pData = sHead; pData += 2;
@@ -95,14 +95,24 @@ public:
 		return strOut.c_str();
     }
 public:
-	WORD sHead;//°üÍ·,¹Ì¶¨Î»FEFF
-	DWORD nLength;//Êý¾Ý³¤¶È
-	WORD sCmd;//ÃüÁî×Ö
-	std::string strData;//Êý¾Ý
-	WORD sSum;//Ð£ÑéºÍ
+	WORD sHead;//ï¿½ï¿½Í·,ï¿½Ì¶ï¿½Î»FEFF
+	DWORD nLength;//ï¿½ï¿½ï¿½Ý³ï¿½ï¿½ï¿½
+	WORD sCmd;//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	std::string strData;//ï¿½ï¿½ï¿½ï¿½
+	WORD sSum;//Ð£ï¿½ï¿½ï¿½
 
-	std::string strOut;//°üµÄÊý¾Ý£¬ÓÃÓÚµ÷ÊÔ
+	std::string strOut;//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½
 };
+
+typedef struct MouseEvent {
+    MouseEvent() :nAction(0), nButton(-1) {
+        ptXY.x = 0;
+        ptXY.y = 0;
+    }
+    WORD nAction;//ç‚¹å‡» ç§»åŠ¨ åŒå‡»
+    WORD nButton;//é¼ æ ‡æŒ‰é”® å·¦/å³/ä¸­ é”®
+    POINT ptXY;//åæ ‡
+}MOUSEEVENT,*PMOUSEEVENT;
 
 class CServerSocket
 {
@@ -164,7 +174,7 @@ public:
 
     bool initSocket() {
 
-        //Ð£Ñé
+        //Ð£ï¿½ï¿½
         if (m_serv == -1) {
             return false;
         }
@@ -187,15 +197,15 @@ public:
     }
     bool AcceptClient() {
         sockaddr_in client_addr;
-        char buffer[1024]; // buffer Î´Ê¹ÓÃµ¼ÖÂ C4101
+        char buffer[1024]; // buffer Î´Ê¹ï¿½Ãµï¿½ï¿½ï¿½ C4101
         int client_addr_size = sizeof(SOCKADDR);
         m_client = accept(m_serv, (SOCKADDR*)&client_addr, &client_addr_size);
         if (m_client == -1)  return false;
 
-        // Ê¹ÓÃ buffer£¬±ÜÃâÎ´ÒýÓÃ¾¯¸æ
+        // Ê¹ï¿½ï¿½ bufferï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½ï¿½ï¿½Ã¾ï¿½ï¿½ï¿½
         int recvLen = recv(m_client, buffer, sizeof(buffer), 0);
         if (recvLen > 0) {
-            // ¿ÉÒÔ¸ù¾ÝÊµ¼ÊÐèÇó´¦Àí½ÓÊÕµ½µÄÊý¾Ý
+            // ï¿½ï¿½ï¿½Ô¸ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         }
 
         return true;
@@ -241,4 +251,12 @@ public:
         }
 		return false;
 	}
-};
+    
+    bool GetMouseEvent(MOUSEEVENT& mouse) {
+        if (m_packet.sCmd == 5) {
+            memcpy(&mouse , m_packet.strData.c_str(),  sizeof(MOUSEEVENT));
+            return true; 
+        }
+        return false;
+    }
+};  
