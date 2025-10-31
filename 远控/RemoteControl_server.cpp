@@ -8,6 +8,7 @@
 #include "direct.h"
 #include "io.h"
 #include <list>
+#include <atlimage.h>
 
 
 typedef struct file_info {
@@ -272,6 +273,53 @@ int MouseEvent() {
     }
 }
 
+int sendScreen() {
+    CImage screen;//适合GDI编程的 库 atlimage.h ,GDI:Graphics Device Interface
+    HDC hScreen = ::GetDC(NULL);
+    int nBitPerPixel = GetDeviceCaps(hScreen, BITSPIXEL);//涉及到了位图的概念 (计算机色彩)
+    int nWidth = GetDeviceCaps(hScreen, HORZRES);
+    int nHeight = GetDeviceCaps(hScreen, VERTRES);
+    screen.Create(nWidth, nHeight, nBitPerPixel);
+    BitBlt(screen.GetDC(), 0, 0, nWidth, nHeight, hScreen, 0, 0, SRCCOPY);
+    ReleaseDC(NULL, hScreen);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, 0); //申请内存
+    if(hMem  == NULL){
+        OutputDebugString(_T("申请内存失败"));
+        return -1;
+    }
+    IStream* pStream = NULL;
+    HRESULT ret = CreateStreamOnHGlobal(NULL, TRUE, &pStream);
+    if(ret == S_OK){
+        OutputDebugString(_T("创建内存流成功"));
+        LARGE_INTEGER bg = { 0 };
+
+        screen.Save(pStream, Gdiplus::ImageFormatPNG); //保存到内存流中
+        pStream->Seek(bg, STREAM_SEEK_SET, NULL); //将指针指向流的开始
+        PBYTE pData =(PBYTE) GlobalLock(hMem);
+        size_t nsize = GlobalSize(hMem);
+        Cpacket pack(6, pData, nsize);
+        GlobalUnlock(hMem);
+       
+    }
+   
+    /*
+    
+     for (int i = 0; i < 10 ; i++){
+        DWORD tick = GetTickCount64();
+        screen.Save(_T("test.png"), Gdiplus::ImageFormatPNG);
+        TRACE(_T("保存png屏幕截图耗时： %d ms\n"), GetTickCount64() - tick);
+        tick = GetTickCount64();
+        screen.Save(_T("test.jpg"), Gdiplus::ImageFormatJPEG);
+        TRACE(_T("保存jpg屏幕截图耗时： %d ms\n"), GetTickCount64() - tick);
+    }
+
+    */
+    pStream->Release();
+    screen.ReleaseDC();
+    GlobalFree(hMem);
+    
+    return 0;
+}
 int main()
     {
         int nRetCode = 0;
@@ -312,6 +360,9 @@ int main()
                 case 5:
                     MouseEvent();
                     break; 
+                case 6://发送屏幕内容(发送屏幕截图)
+                    sendScreen();
+                    break;
                 }
                
               
