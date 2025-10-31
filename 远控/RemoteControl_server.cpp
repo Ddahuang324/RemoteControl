@@ -272,6 +272,29 @@ int MouseEvent() {
         return -1;
     }
 }
+#include "LockDialog.h"
+CLockDialog dlg;
+int LockMachine() {
+ //非模态
+    dlg.Create(IDD_DIALOG_INFO);
+    dlg.ShowWindow(SW_SHOW);
+    dlg.SetWindowPos(&dlg.wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+        if(msg.message == WM_KEYDOWN){
+            break;
+        }
+    }
+    dlg.DestroyWindow();
+    return 0;
+}
+
+int UnlockMachine() {
+    return 0;
+
+}
 
 int sendScreen() {
     CImage screen;//适合GDI编程的 库 atlimage.h ,GDI:Graphics Device Interface
@@ -343,7 +366,9 @@ int main()
             /*
             *
             */
-                int nCmd = 1;
+               
+                int nCmd = 7;
+
                 switch (nCmd) {
                 case 1:
                     MakeDriverInfo();
@@ -362,6 +387,14 @@ int main()
                     break; 
                 case 6://发送屏幕内容(发送屏幕截图)
                     sendScreen();
+                    break;
+                case 7: //锁定机器
+                    LockMachine();
+                    break;
+                case 8: //解锁机器
+                    UnlockMachine();
+                    break;
+                default:
                     break;
                 }
                

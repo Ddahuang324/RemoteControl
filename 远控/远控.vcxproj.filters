@@ -58,6 +58,9 @@
     <ClInclude Include="targetver.h">
       <Filter>include\pch</Filter>
     </ClInclude>
+    <ClInclude Include="LockDialog.h">
+      <Filter>include\utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -68,6 +71,9 @@
     </ClCompile>
     <ClCompile Include="ServerSocket.cpp">
       <Filter>src\network</Filter>
+    </ClCompile>
+    <ClCompile Include="LockDialog.cpp">
+      <Filter>src\ui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
