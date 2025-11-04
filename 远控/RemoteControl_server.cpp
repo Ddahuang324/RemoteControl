@@ -274,11 +274,22 @@ int MouseEvent() {
 }
 #include "LockDialog.h"
 CLockDialog dlg;
-int LockMachine() {
- //非模态
-    dlg.Create(IDD_DIALOG_INFO);
+unsigned threadId = 0;
+
+
+
+unsigned __stdcall threadLockDlg(void* arg) {
+     dlg.Create(IDD_DIALOG_INFO);
     dlg.ShowWindow(SW_SHOW);
+    //窗口置顶
     dlg.SetWindowPos(&dlg.wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    //限制鼠标功能
+    ShowCursor(false);
+    CRect rect;
+    //限制鼠标位置
+    dlg.GetWindowRect(&rect);
+    ClipCursor(&rect);  // 限制鼠标在对话框范围内
+
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
@@ -287,13 +298,34 @@ int LockMachine() {
             break;
         }
     }
+    ClipCursor(NULL);  // 释放鼠标限制
     dlg.DestroyWindow();
+
+    ShowCursor(true);
+    _endthread();
+    _endthreadex(0);
+    return 0;
+}
+
+int LockMachine() {
+ //非模态
+ if((dlg.m_hWnd == NULL) || (dlg.m_hWnd == INVALID_HANDLE_VALUE)){//判断窗口是否存在
+     //_beginthread(threadLockDlg, 0, NULL);//如果不存在则创建线程显示窗口
+     _beginthreadex(NULL, 0, threadLockDlg, NULL, 0, &threadId);
+ }
+
+
+    Cpacket pack(7, NULL, 0);//发送锁定命令
+    CServerSocket::GetInstance().Send(pack); //发送回执
+   
     return 0;
 }
 
 int UnlockMachine() {
-    return 0;
-
+    PostThreadMessage(threadId, WM_KEYDOWN, 0, 0); //向锁定线程发送消息，结束锁定对话框
+    Cpacket pack(8, NULL, 0); //发送回执
+    CServerSocket::GetInstance().Send(pack);
+    return 0; 
 }
 
 int sendScreen() {
@@ -390,6 +422,8 @@ int main()
                     break;
                 case 7: //锁定机器
                     LockMachine();
+                    //Sleep(500);
+                    //LockMachine();
                     break;
                 case 8: //解锁机器
                     UnlockMachine();
@@ -397,7 +431,12 @@ int main()
                 default:
                     break;
                 }
-               
+                Sleep(5000);
+                UnlockMachine();
+
+                while(dlg.m_hWnd != NULL || dlg.m_hWnd != INVALID_HANDLE_VALUE){
+                   Sleep(100);
+                }
               
             }
         }
