@@ -165,6 +165,7 @@
     <ClInclude Include="include\utils\RemoteControl_server.h" />
     <ClInclude Include="include\core\Enities.h" />
     <ClInclude Include="include\core\fileSystem.h" />
+    <ClInclude Include="include\core\InputeSimulator.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">

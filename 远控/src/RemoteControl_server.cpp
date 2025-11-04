@@ -7,6 +7,7 @@
 #include "ServerSocket.h"
 #include "Enities.h"
 #include "fileSystem.h"
+#include "InputeSimulator.h"
 #include <sstream>
 
 #ifdef _DEBUG
@@ -74,10 +75,15 @@ int main()
                           }
                           break;
                       }
-                      case CMD::CMD_DOWNLOAD_FILE: {
-                          // TODO: 实现文件下载功能
-                          std::string errMsg = "Download file not implemented yet";
-                          serverSocket.SendErrorPacket(errMsg);
+                       case CMD::CMD_DOWNLOAD_FILE: {
+                          if (!packet.data.empty()) {
+                              std::string path(packet.data.begin(), packet.data.end());
+                              DownloadFile(path, serverSocket);
+                          }
+                          break;
+                      }
+                      case CMD::CMD_MOUSE_EVENT: {
+                          HandleMouseEvent(serverSocket, packet);
                           break;
                       }
                       default: {

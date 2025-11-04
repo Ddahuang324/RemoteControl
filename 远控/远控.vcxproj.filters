@@ -64,6 +64,9 @@
     <ClInclude Include="include\core\fileSystem.h">
       <Filter>include\core</Filter>
     </ClInclude>
+    <ClInclude Include="include\core\InputeSimulator.h">
+      <Filter>include\core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">
