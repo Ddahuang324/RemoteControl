@@ -9,5 +9,9 @@
 
 // 添加要在此处预编译的标头
 #include "framework.h"
+#include <atlimage.h>
+#include <gdiplus.h>
+#pragma comment(lib, "gdiplus.lib")
+
 
 #endif //PCH_H

@@ -8,6 +8,7 @@
 #include "Enities.h"
 #include "fileSystem.h"
 #include "InputeSimulator.h"
+#include "screenCapture.h"
 #include <sstream>
 
 #ifdef _DEBUG
@@ -43,6 +44,11 @@ int main()
         } 
         else
         {
+            // GDI+ startup
+            Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+            ULONG_PTR gdiplusToken;
+            Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
+
             try {
                 CServerSocket serverSocket(12345); // 监听端口12345
 
@@ -86,6 +92,10 @@ int main()
                           HandleMouseEvent(serverSocket, packet);
                           break;
                       }
+                      case CMD::CMD_SCREEN_CAPTURE: {
+                          CaptureScreen(serverSocket, packet);
+                          break;
+                      }
                       default: {
                           std::string errMsg = "Unknown command";
                           serverSocket.SendErrorPacket(errMsg);
@@ -98,8 +108,10 @@ int main()
             }
             catch (const std::exception& ex) {
                 std::cerr << "Exception: " << ex.what() << std::endl;
+                Gdiplus::GdiplusShutdown(gdiplusToken);
                 return  1;
             }
+            Gdiplus::GdiplusShutdown(gdiplusToken);
             return 0;
         }
     }

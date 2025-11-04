@@ -13,6 +13,8 @@ enum CMD : unsigned short {
 	CMD_DOWNLOAD_FILE = 4,
 	CMD_EOF = 5,
 	CMD_MOUSE_EVENT = 6,
+	CMD_SCREEN_CAPTURE = 7,
+	CMD_SCREEN_DIFF = 8,
 	CMD_ERROR = 999
 };
 
@@ -82,3 +84,4 @@ struct MouseEventData{
 		return serializedData;
 	}
 };
+

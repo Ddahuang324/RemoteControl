@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "framework.h"
+#include "Enities.h"
 #include <numeric>
 #include <optional>
 #include <string>
@@ -177,7 +178,7 @@ public:
 	
 	void SendErrorPacket(const std::string& errorMessage) {
 		std::vector<BYTE> errPayload(errorMessage.begin(), errorMessage.end());
-		Cpacket errPacket(CMD::CMD_ERROR, errPayload);
+		Cpacket errPacket(CMD_ERROR, errPayload);
 		SendPacket(errPacket);
 	}
 	

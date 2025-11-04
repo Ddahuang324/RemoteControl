@@ -166,6 +166,8 @@
     <ClInclude Include="include\core\Enities.h" />
     <ClInclude Include="include\core\fileSystem.h" />
     <ClInclude Include="include\core\InputeSimulator.h" />
+    <ClInclude Include="include\core\screenCapture.h" />
+    <ClInclude Include="include\core\diffAlgorithm.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">
@@ -176,7 +178,6 @@
     </ClCompile>
     <ClCompile Include="src\RemoteControl_server.cpp" />
     <ClCompile Include="src\network\ServerSocket.cpp" />
-    <ClCompile Include="src\core\fileSystem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RemoteControl_server.rc" />
