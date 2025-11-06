@@ -4,8 +4,58 @@
 #include <tuple>
 #include <cstring>
 #include <chrono>
+#include <memory>
+#include <stdexcept>
+#include <comutil.h>
+#include <atlimage.h>
+#include <iostream>
 
 using BYTE = unsigned char;
+using namespace Gdiplus;
+
+struct ScreenDeleter {
+    void operator()(HDC hdc) const {
+        if (hdc) {
+            ::DeleteDC(hdc);
+        }
+    }
+};
+
+using ScopedHDC = std::unique_ptr<std::remove_pointer<HDC>::type, ScreenDeleter>;//RAII
+
+struct StreamDeleter {
+    void operator()(IStream* pStream) const {
+        if (pStream) {
+            pStream->Release();
+        }
+    }
+};
+
+using ScopedStream = std::unique_ptr<IStream, StreamDeleter>;//RAII
+
+class GlobalLockRAII{
+public:
+   GlobalLockRAII(HGLOBAL hMem) : m_hMem(hMem), m_pData(nullptr){
+      if(m_hMem){
+           m_pData = ::GlobalLock(m_hMem);
+      }
+   }
+   ~GlobalLockRAII(){
+      if(m_pData && m_hMem){
+           ::GlobalUnlock(m_hMem);
+      }
+   }
+   // 禁止拷贝
+   GlobalLockRAII(const GlobalLockRAII&) = delete;
+   GlobalLockRAII& operator=(const GlobalLockRAII&) = delete;
+
+   // 获取裸指针
+   void* get() const { return m_pData; }
+
+private:
+   HGLOBAL m_hMem;
+   void* m_pData;
+};
 
 // 自定义差异检测算法：逐像素比较，返回变化矩形的边界
 // 返回：minX, minY, maxX, maxY，如果无变化则 minX > maxX
@@ -110,4 +160,224 @@ inline std::tuple<int, int, int, int> DetectScreenDiffCompetitive(
 #else
     return DetectScreenDiff(prevPixels, currPixels, width, height);
 #endif
+}
+
+// 辅助函数：创建屏幕数据包
+inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, int minY, int maxX, int maxY, int nWidth, int nHeight, int nBitperPixel) {
+    std::vector<BYTE> diffData;
+    if (minX <= maxX && minY <= maxY) {
+        std::cout << "Sending diff image: (" << minX << "," << minY << ") to (" << maxX << "," << maxY << ")" << std::endl;
+        // 有变化，发送差异
+        int diffWidth = maxX - minX + 1;
+        int diffHeight = maxY - minY + 1;
+
+        // 创建差异图像
+        CImage diffImage;
+        if (diffImage.Create(diffWidth, diffHeight, nBitperPixel) != S_OK) {
+            throw std::runtime_error("Failed to create diff image.");
+        }
+
+        HDC srcDC = ScreenImage.GetDC();
+        HDC dstDC = diffImage.GetDC();
+        if (::BitBlt(dstDC, 0, 0, diffWidth, diffHeight, srcDC, minX, minY, SRCCOPY) == FALSE) {
+            ScreenImage.ReleaseDC();
+            diffImage.ReleaseDC();
+            throw std::runtime_error("BitBlt for diff failed.");
+        }
+        ScreenImage.ReleaseDC();
+        diffImage.ReleaseDC();
+
+        // 保存差异图像为 PNG
+        IStream* pStreamRaw = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        if (FAILED(hr)) {
+            throw std::runtime_error("CreateStreamOnHGlobal failed for diff.");
+        }
+        ScopedStream pStream(pStreamRaw);
+
+        hr = diffImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
+        if (FAILED(hr)) {
+            throw std::runtime_error("Failed to save diff image.");
+        }
+
+        HGLOBAL hGlobal = nullptr;
+        hr = GetHGlobalFromStream(pStream.get(), &hGlobal);
+        if (FAILED(hr) || hGlobal == nullptr) {
+            throw std::runtime_error("GetHGlobalFromStream failed for diff.");
+        }
+
+        GlobalLockRAII lock(hGlobal);
+        BYTE* pData = static_cast<BYTE*>(lock.get());
+        if (pData == nullptr) {
+            throw std::runtime_error("GlobalLock failed for diff.");
+        }
+
+        size_t dataSize = ::GlobalSize(hGlobal);
+        if (dataSize == 0) {
+            throw std::runtime_error("GlobalSize returned zero for diff.");
+        }
+
+        // 序列化数据：x, y, w, h + PNG
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minX), reinterpret_cast<BYTE*>(&minX) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minY), reinterpret_cast<BYTE*>(&minY) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&diffWidth), reinterpret_cast<BYTE*>(&diffWidth) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&diffHeight), reinterpret_cast<BYTE*>(&diffHeight) + sizeof(int));
+        diffData.insert(diffData.end(), pData, pData + dataSize);
+    } else {
+        std::cout << "Sending full screen image" << std::endl;
+        // 无变化或首次，发送全屏
+        IStream* pStreamRaw = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        if (FAILED(hr)) {
+            throw std::runtime_error("CreateStreamOnHGlobal failed.");
+        }
+        ScopedStream pStream(pStreamRaw);
+
+        hr = ScreenImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
+        if (FAILED(hr)) {
+            throw std::runtime_error("Failed to save image to stream.");
+        }
+
+        HGLOBAL hGlobal = nullptr;
+        hr = GetHGlobalFromStream(pStream.get(), &hGlobal);
+        if (FAILED(hr) || hGlobal == nullptr) {
+            throw std::runtime_error("GetHGlobalFromStream failed.");
+        }
+
+        GlobalLockRAII lock(hGlobal);
+        BYTE* pData = static_cast<BYTE*>(lock.get());
+        if (pData == nullptr) {
+            throw std::runtime_error("GlobalLock failed.");
+        }
+
+        size_t dataSize = ::GlobalSize(hGlobal);
+        if (dataSize == 0) {
+            throw std::runtime_error("GlobalSize returned zero.");
+        }
+
+        // 序列化数据：x=0, y=0, w=nWidth, h=nHeight + PNG
+        int zero = 0;
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zero), reinterpret_cast<BYTE*>(&zero) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zero), reinterpret_cast<BYTE*>(&zero) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&nWidth), reinterpret_cast<BYTE*>(&nWidth) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&nHeight), reinterpret_cast<BYTE*>(&nHeight) + sizeof(int));
+        diffData.insert(diffData.end(), pData, pData + dataSize);
+    }
+    return diffData;
+}
+
+// 算法工厂：生成屏幕数据（检测差异并创建数据包）
+inline std::vector<BYTE> GenerateScreenData(const CImage& screenImage, const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height, int bitPerPixel) {
+    auto [minX, minY, maxX, maxY] = DetectScreenDiffCompetitive(prevPixels, currPixels, width, height);
+    return CreateScreenData(screenImage, minX, minY, maxX, maxY, width, height, bitPerPixel);
+}
+
+// 辅助函数：创建屏幕数据包
+inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, int minY, int maxX, int maxY, int nWidth, int nHeight, int nBitperPixel) {
+    std::vector<BYTE> diffData;
+    if (minX <= maxX && minY <= maxY) {
+        std::cout << "Sending diff image: (" << minX << "," << minY << ") to (" << maxX << "," << maxY << ")" << std::endl;
+        // 有变化，发送差异
+        int diffWidth = maxX - minX + 1;
+        int diffHeight = maxY - minY + 1;
+
+        // 创建差异图像
+        CImage diffImage;
+        if (diffImage.Create(diffWidth, diffHeight, nBitperPixel) != S_OK) {
+            throw std::runtime_error("Failed to create diff image.");
+        }
+
+        HDC srcDC = ScreenImage.GetDC();
+        HDC dstDC = diffImage.GetDC();
+        if (::BitBlt(dstDC, 0, 0, diffWidth, diffHeight, srcDC, minX, minY, SRCCOPY) == FALSE) {
+            ScreenImage.ReleaseDC();
+            diffImage.ReleaseDC();
+            throw std::runtime_error("BitBlt for diff failed.");
+        }
+        ScreenImage.ReleaseDC();
+        diffImage.ReleaseDC();
+
+        // 保存差异图像为 PNG
+        IStream* pStreamRaw = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        if (FAILED(hr)) {
+            throw std::runtime_error("CreateStreamOnHGlobal failed for diff.");
+        }
+        ScopedStream pStream(pStreamRaw);
+
+        hr = diffImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
+        if (FAILED(hr)) {
+            throw std::runtime_error("Failed to save diff image.");
+        }
+
+        HGLOBAL hGlobal = nullptr;
+        hr = GetHGlobalFromStream(pStream.get(), &hGlobal);
+        if (FAILED(hr) || hGlobal == nullptr) {
+            throw std::runtime_error("GetHGlobalFromStream failed for diff.");
+        }
+
+        GlobalLockRAII lock(hGlobal);
+        BYTE* pData = static_cast<BYTE*>(lock.get());
+        if (pData == nullptr) {
+            throw std::runtime_error("GlobalLock failed for diff.");
+        }
+
+        size_t dataSize = ::GlobalSize(hGlobal);
+        if (dataSize == 0) {
+            throw std::runtime_error("GlobalSize returned zero for diff.");
+        }
+
+        // 序列化数据：x, y, w, h + PNG
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minX), reinterpret_cast<BYTE*>(&minX) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minY), reinterpret_cast<BYTE*>(&minY) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&diffWidth), reinterpret_cast<BYTE*>(&diffWidth) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&diffHeight), reinterpret_cast<BYTE*>(&diffHeight) + sizeof(int));
+        diffData.insert(diffData.end(), pData, pData + dataSize);
+    } else {
+        std::cout << "Sending full screen image" << std::endl;
+        // 无变化或首次，发送全屏
+        IStream* pStreamRaw = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        if (FAILED(hr)) {
+            throw std::runtime_error("CreateStreamOnHGlobal failed.");
+        }
+        ScopedStream pStream(pStreamRaw);
+
+        hr = ScreenImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
+        if (FAILED(hr)) {
+            throw std::runtime_error("Failed to save image to stream.");
+        }
+
+        HGLOBAL hGlobal = nullptr;
+        hr = GetHGlobalFromStream(pStream.get(), &hGlobal);
+        if (FAILED(hr) || hGlobal == nullptr) {
+            throw std::runtime_error("GetHGlobalFromStream failed.");
+        }
+
+        GlobalLockRAII lock(hGlobal);
+        BYTE* pData = static_cast<BYTE*>(lock.get());
+        if (pData == nullptr) {
+            throw std::runtime_error("GlobalLock failed.");
+        }
+
+        size_t dataSize = ::GlobalSize(hGlobal);
+        if (dataSize == 0) {
+            throw std::runtime_error("GlobalSize returned zero.");
+        }
+
+        // 序列化数据：x=0, y=0, w=nWidth, h=nHeight + PNG
+        int zero = 0;
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zero), reinterpret_cast<BYTE*>(&zero) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zero), reinterpret_cast<BYTE*>(&zero) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&nWidth), reinterpret_cast<BYTE*>(&nWidth) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&nHeight), reinterpret_cast<BYTE*>(&nHeight) + sizeof(int));
+        diffData.insert(diffData.end(), pData, pData + dataSize);
+    }
+    return diffData;
+}
+
+// 算法工厂：生成屏幕数据（检测差异并创建数据包）
+inline std::vector<BYTE> GenerateScreenData(const CImage& screenImage, const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height, int bitPerPixel) {
+    auto [minX, minY, maxX, maxY] = DetectScreenDiffCompetitive(prevPixels, currPixels, width, height);
+    return CreateScreenData(screenImage, minX, minY, maxX, maxY, width, height, bitPerPixel);
 }
