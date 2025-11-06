@@ -44,8 +44,8 @@ inline std::tuple<CImage, std::vector<BYTE>, int, int, int> CaptureScreenImage()
     }
     ScreenImage.ReleaseDC();
 
-    // 获取当前帧像素数据
-    int stride = nWidth * 4; // 假设 32-bit
+    // 动态计算 stride（考虑字节对齐）
+    int stride = ((nWidth * nBitperPixel + 31) / 32) * 4;
     BYTE* currentPixels = reinterpret_cast<BYTE*>(ScreenImage.GetBits());
     std::vector<BYTE> currentFramePixels(currentPixels, currentPixels + nHeight * stride);
 
