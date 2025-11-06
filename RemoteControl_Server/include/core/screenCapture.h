@@ -8,7 +8,7 @@
 
 #include "pch.h"
 #include "Enities.h"
-#include "ServerSocket.h"
+#include "../network/ServerSocket.h"
 #include "diffAlgorithm.h"
 
 using namespace Gdiplus;

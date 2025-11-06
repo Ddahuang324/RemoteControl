@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "framework.h"
+#include "../pch/framework.h"
 #include "Enities.h"
 #include <numeric>
 #include <optional>

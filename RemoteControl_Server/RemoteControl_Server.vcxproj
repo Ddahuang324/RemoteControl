@@ -22,9 +22,9 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{e972aeff-9575-4f56-8723-9d5272d1bc8a}</ProjectGuid>
-    <RootNamespace>远控</RootNamespace>
+    <RootNamespace>RemoteControl_Server</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Remote Control_Server</ProjectName>
+    <ProjectName>RemoteControl_Server</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

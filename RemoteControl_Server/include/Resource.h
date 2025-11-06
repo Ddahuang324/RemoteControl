@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ 生成的包含文件。
-// 使用者 远控.rc
+// 使用者 RemoteControl_Server.rc
 
 #define IDS_APP_TITLE			103
 
