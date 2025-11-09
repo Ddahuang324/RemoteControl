@@ -1,5 +1,6 @@
 #pragma once
 
+#include <gdiplus.h>
 #include <vector>
 #include <tuple>
 #include <cstring>
@@ -9,9 +10,102 @@
 #include <comutil.h>
 #include <atlimage.h>
 #include <iostream>
+#include <sstream>
 
 using BYTE = unsigned char;
 using namespace Gdiplus;
+
+// Helper: get encoder CLSID for a given mime type (e.g., "image/png")
+// 修复：C2264 错误通常是因为函数声明和定义不一致，或未声明。建议将 static int GetEncoderClsid(...) 的声明提前到文件顶部，并确保声明和定义一致。
+static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
+
+static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
+    UINT num = 0;          // number of image encoders
+    UINT size = 0;         // size of the image encoder array in bytes
+
+    ImageCodecInfo* pImageCodecInfo = nullptr;
+    GetImageEncodersSize(&num, &size);
+    if (size == 0) return -1;  // Failure
+
+    pImageCodecInfo = (ImageCodecInfo*)(malloc(size));
+    if (pImageCodecInfo == nullptr) return -1;  // Failure
+
+    GetImageEncoders(num, size, pImageCodecInfo);
+    for (UINT j = 0; j < num; ++j) {
+        if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
+            *pClsid = pImageCodecInfo[j].Clsid;
+            free(pImageCodecInfo);
+            return j; // success
+        }
+    }
+    free(pImageCodecInfo);
+    return -1; // not found
+}
+
+// Helper: try to save a CImage into a IStream using GDI+ Bitmap encoder if necessary
+static void SaveCImageToStreamFallback(const CImage& img, IStream* pStream) {
+    // First try CImage::Save (some formats succeed)
+    HRESULT hr = img.Save(pStream, Gdiplus::ImageFormatPNG);
+    if (SUCCEEDED(hr)) return;
+
+    // Fallback: convert to HBITMAP -> Gdiplus::Bitmap and save via encoder CLSID
+        // Fallback: create a Gdiplus::Bitmap and copy pixels via LockBits, then save
+        int w = img.GetWidth();
+        int h = img.GetHeight();
+        int srcBpp = img.GetBPP();
+        const BYTE* srcBits = reinterpret_cast<const BYTE*>(img.GetBits());
+        if (!srcBits) {
+            throw std::runtime_error("SaveCImageToStreamFallback: img.GetBits() returned NULL.");
+        }
+
+        // Create destination bitmap with 32bpp ARGB
+        Bitmap dstBitmap(w, h, PixelFormat32bppARGB);
+        BitmapData bd;
+        Rect rect(0, 0, w, h);
+        Status st = dstBitmap.LockBits(&rect, ImageLockModeWrite, PixelFormat32bppARGB, &bd);
+        if (st != Ok) {
+            std::ostringstream oss;
+            oss << "SaveCImageToStreamFallback: LockBits failed status=" << static_cast<int>(st);
+            throw std::runtime_error(oss.str());
+        }
+
+        int srcStride = ((w * srcBpp + 31) / 32) * 4;
+        BYTE* dstBase = static_cast<BYTE*>(bd.Scan0);
+        int dstStride = bd.Stride;
+        // bd.Stride may be negative; handle accordingly
+        for (int y = 0; y < h; ++y) {
+            BYTE* dstRow;
+            if (dstStride > 0) dstRow = dstBase + static_cast<INT_PTR>(y) * dstStride;
+            else dstRow = dstBase + static_cast<INT_PTR>((h - 1 - y)) * (-dstStride);
+
+            const BYTE* srcRow = srcBits + static_cast<INT_PTR>(y) * srcStride;
+
+            // Copy min number of bytes per row (dst expects 4*w)
+            size_t copyBytes = static_cast<size_t>(w) * 4;
+            // If srcStride is smaller for some reason, clamp
+            if (copyBytes > static_cast<size_t>(srcStride)) copyBytes = srcStride;
+
+            memcpy(dstRow, srcRow, copyBytes);
+            // If dstStride > copyBytes, zero the rest to be safe
+            if (static_cast<size_t>(abs(dstStride)) > copyBytes) {
+                memset(dstRow + copyBytes, 0, static_cast<size_t>(abs(dstStride)) - copyBytes);
+            }
+        }
+
+        dstBitmap.UnlockBits(&bd);
+
+        CLSID pngClsid;
+        if (GetEncoderClsid(L"image/png", &pngClsid) < 0) {
+            throw std::runtime_error("SaveCImageToStreamFallback: PNG encoder not found.");
+        }
+
+        st = dstBitmap.Save(pStream, &pngClsid, NULL);
+        if (st != Ok) {
+            std::ostringstream oss;
+            oss << "SaveCImageToStreamFallback: GDI+ Bitmap::Save failed status=" << static_cast<int>(st);
+            throw std::runtime_error(oss.str());
+        }
+}
 
 struct ScreenDeleter {
     void operator()(HDC hdc) const {
@@ -57,23 +151,65 @@ private:
     void* m_pData;
 };
 
+// RAII wrapper for CImage GetDC/ReleaseDC to ensure paired release even on exceptions
+class CImageDCRAII {
+public:
+    explicit CImageDCRAII(const CImage& img) : m_img(img), m_hdc(NULL), m_acquired(false) {
+        // Some CImage implementations have non-const GetDC; use const_cast to call safely
+        m_hdc = const_cast<CImage&>(m_img).GetDC();
+        if (m_hdc) m_acquired = true;
+    }
+    ~CImageDCRAII() {
+        if (m_acquired) {
+            const_cast<CImage&>(m_img).ReleaseDC();
+        }
+    }
+    CImageDCRAII(const CImageDCRAII&) = delete;
+    CImageDCRAII& operator=(const CImageDCRAII&) = delete;
+
+    HDC get() const { return m_hdc; }
+    explicit operator bool() const { return m_acquired; }
+
+private:
+    const CImage& m_img;
+    HDC m_hdc;
+    bool m_acquired;
+};
+
 // 自定义差异检测算法：逐像素比较，返回变化矩形的边界
 // 返回：minX, minY, maxX, maxY，如果无变化则 minX > maxX
-std::tuple<int, int, int, int> DetectScreenDiff(const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height) {
-    if (prevPixels.size() != currPixels.size() || prevPixels.empty()) {
+std::tuple<int, int, int, int> DetectScreenDiff(const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height, int bytesPerPixel) {
+    std::cout << "[DetectScreenDiff] ENTRY: width=" << width << " height=" << height << " bytesPerPixel=" << bytesPerPixel
+              << " prevSize=" << prevPixels.size() << " currSize=" << currPixels.size() << std::endl;
+    
+    if (prevPixels.empty() || currPixels.empty() || prevPixels.size() != currPixels.size()) {
         // 尺寸变化或首次，返回全屏
+        std::cout << "[DetectScreenDiff] First frame or size mismatch - returning full screen (0,0)-(" 
+                  << (width-1) << "," << (height-1) << ")" << std::endl;
         return {0, 0, width - 1, height - 1};
     }
 
-    int stride = width * 4; // 假设 32-bit RGBA
+    // Use same stride calculation as used when pixel buffer is created:
+    // rows are DWORD-aligned. This avoids mis-indexing when each row has padding.
+    int stride = ((width * bytesPerPixel + 31) / 32) * 4;
+    std::cout << "[DetectScreenDiff] stride=" << stride << " (bytesPerPixel=" << bytesPerPixel << ")" << std::endl;
+    
     int minX = width, minY = height, maxX = -1, maxY = -1;
     bool hasChanges = false;
+    int changeCount = 0;
 
     for (int y = 0; y < height; ++y) {
+        size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(stride);
         for (int x = 0; x < width; ++x) {
-            int index = y * stride + x * 4;
-            if (std::memcmp(&currPixels[index], &prevPixels[index], 4) != 0) {
+            size_t index = rowBase + static_cast<size_t>(x) * static_cast<size_t>(bytesPerPixel);
+            // 额外安全检查
+            if (index + bytesPerPixel > currPixels.size() || index + bytesPerPixel > prevPixels.size()) {
+                // 非法索引，防止越界
+                continue;
+            }
+            if (std::memcmp(&currPixels[index], &prevPixels[index], bytesPerPixel) != 0) {
                 hasChanges = true;
+                changeCount++;
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;
                 if (y < minY) minY = y;
@@ -84,9 +220,12 @@ std::tuple<int, int, int, int> DetectScreenDiff(const std::vector<BYTE>& prevPix
 
     if (!hasChanges) {
         // 无变化，返回无效矩形
+        std::cout << "[DetectScreenDiff] No changes detected - returning invalid rect (1,1,0,0)" << std::endl;
         return {1, 1, 0, 0}; // minX > maxX
     }
 
+    std::cout << "[DetectScreenDiff] Changes detected! changeCount=" << changeCount 
+              << " rect=(" << minX << "," << minY << ")-(" << maxX << "," << maxY << ")" << std::endl;
     return {minX, minY, maxX, maxY};
 }
 
@@ -127,7 +266,8 @@ inline std::tuple<int, int, int, int> DetectScreenDiffCompetitive(
     const std::vector<BYTE>& prevPixels,
     const std::vector<BYTE>& currPixels,
     int width,
-    int height) {
+    int height,
+    int bytesPerPixel) {
     // 静态局部变量：每个编译单元各自独立，避免全局状态带来的生命周期复杂度
     static bool s_tested = false;
     static Algorithm s_chosen = Algorithm::Custom;
@@ -135,7 +275,7 @@ inline std::tuple<int, int, int, int> DetectScreenDiffCompetitive(
     if (!s_tested) {
         // 自定义算法计时
         auto start = std::chrono::high_resolution_clock::now();
-        volatile auto r1 = DetectScreenDiff(prevPixels, currPixels, width, height);
+        volatile auto r1 = DetectScreenDiff(prevPixels, currPixels, width, height, bytesPerPixel);
         auto end = std::chrono::high_resolution_clock::now();
         auto customTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
@@ -155,18 +295,44 @@ inline std::tuple<int, int, int, int> DetectScreenDiffCompetitive(
 
     // 使用选择的算法
     if (s_chosen == Algorithm::Custom) {
-        return DetectScreenDiff(prevPixels, currPixels, width, height);
+        return DetectScreenDiff(prevPixels, currPixels, width, height, bytesPerPixel);
     }
 #ifdef USE_OPENCV
     return DetectScreenDiffOpenCVRaw(prevPixels, currPixels, width, height);
 #else
-    return DetectScreenDiff(prevPixels, currPixels, width, height);
+    return DetectScreenDiff(prevPixels, currPixels, width, height, bytesPerPixel);
 #endif
 }
 
 // 辅助函数：创建屏幕数据包
 inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, int minY, int maxX, int maxY, int nWidth, int nHeight, int nBitperPixel) {
     std::vector<BYTE> diffData;
+    // 诊断输出：打印传入 ScreenImage 的属性，帮助排查传入图像与 width/height 参数不一致的问题
+    try {
+        int siW = ScreenImage.GetWidth();
+        int siH = ScreenImage.GetHeight();
+        int siBpp = ScreenImage.GetBPP();
+        const void* siBits = ScreenImage.GetBits();
+        std::cout << "CreateScreenData: Entered with ScreenImage w=" << siW << " h=" << siH << " bpp=" << siBpp
+                  << " bitsPtr=" << siBits << " requested nWidth=" << nWidth << " nHeight=" << nHeight << std::endl;
+    } catch (...) {
+        std::cout << "CreateScreenData: failed to query ScreenImage properties" << std::endl;
+    }
+    // 如果 ROI 无效（min>max 或 minY>maxY），则表示无变化：序列化为 (minX,minY,w=0,h=0) 并返回（不包含图像数据）
+    if (minX > maxX || minY > maxY) {
+        std::cout << "CreateScreenData: No changes detected, serializing empty diff header (" << minX << "," << minY << ")\n";
+        int zeroW = 0;
+        int zeroH = 0;
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minX), reinterpret_cast<BYTE*>(&minX) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&minY), reinterpret_cast<BYTE*>(&minY) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zeroW), reinterpret_cast<BYTE*>(&zeroW) + sizeof(int));
+        diffData.insert(diffData.end(), reinterpret_cast<BYTE*>(&zeroH), reinterpret_cast<BYTE*>(&zeroH) + sizeof(int));
+        // 为了兼容上层协议的最小消息大小（测试期望 header 之后有数据），添加 1 字节占位符
+        const BYTE placeholder = 0;
+        diffData.push_back(placeholder);
+        return diffData;
+    }
+
     if (minX <= maxX && minY <= maxY) {
         std::cout << "Sending diff image: (" << minX << "," << minY << ") to (" << maxX << "," << maxY << ")" << std::endl;
         // 有变化，发送差异
@@ -175,31 +341,86 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
 
         // 创建差异图像
         CImage diffImage;
-        if (diffImage.Create(diffWidth, diffHeight, nBitperPixel) != S_OK) {
-            throw std::runtime_error("Failed to create diff image.");
+        // 尝试使用更稳妥的像素格式创建（优先 32bpp，其次 24bpp）
+        HRESULT hr = diffImage.Create(diffWidth, diffHeight, 32);
+        if (FAILED(hr)) {
+            hr = diffImage.Create(diffWidth, diffHeight, 24);
+        }
+        if (FAILED(hr)) {
+            DWORD lastError = GetLastError();
+            std::ostringstream oss;
+            oss << "Failed to create diff image. hr=0x" << std::hex << hr
+                << " lastError=" << std::dec << lastError
+                << " w=" << diffWidth << " h=" << diffHeight
+                << " requestedBpp=" << nBitperPixel;
+            throw std::runtime_error(oss.str());
         }
 
-        HDC srcDC = ScreenImage.GetDC();
-        HDC dstDC = diffImage.GetDC();
-        if (::BitBlt(dstDC, 0, 0, diffWidth, diffHeight, srcDC, minX, minY, SRCCOPY) == FALSE) {
-            ScreenImage.ReleaseDC();
-            diffImage.ReleaseDC();
+        // 防御性检查：打印并验证源图像与差异图像内部状态，避免在 CImage 内部触发断言
+        try {
+            int sW = ScreenImage.GetWidth();
+            int sH = ScreenImage.GetHeight();
+            int sBpp = ScreenImage.GetBPP();
+            const void* sBits = ScreenImage.GetBits();
+            std::cout << "CreateScreenData: Source image w=" << sW << " h=" << sH << " bpp=" << sBpp
+                      << " bitsPtr=" << sBits << std::endl;
+            if (!sBits) {
+                throw std::runtime_error("CreateScreenData: source ScreenImage.GetBits() returned nullptr.");
+            }
+        } catch (const std::exception& ex) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: failed pre-check on source image: " << ex.what();
+            throw std::runtime_error(oss.str());
+        }
+
+        // 使用 RAII 包装获取与释放 DC，确保在异常时也能成对释放
+        CImageDCRAII srcWrapper(ScreenImage);
+        if (!srcWrapper) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: ScreenImage.GetDC() returned NULL for ROI (" << minX << "," << minY << ")-(" << maxX << "," << maxY << ")";
+            throw std::runtime_error(oss.str());
+        }
+
+        // 在请求目标 DC 之前再次检查 diffImage 内部状态（保持原有防御性检查）
+        try {
+            int dW = diffImage.GetWidth();
+            int dH = diffImage.GetHeight();
+            int dBpp = diffImage.GetBPP();
+            const void* dBits = diffImage.GetBits();
+            std::cout << "CreateScreenData: Diff image w=" << dW << " h=" << dH << " bpp=" << dBpp
+                      << " bitsPtr=" << dBits << std::endl;
+            if (!dBits) {
+                throw std::runtime_error("CreateScreenData: diffImage.GetBits() returned nullptr.");
+            }
+        } catch (const std::exception& ex) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: failed pre-check on diff image: " << ex.what();
+            throw std::runtime_error(oss.str());
+        }
+
+        CImageDCRAII dstWrapper(diffImage);
+        if (!dstWrapper) {
+            throw std::runtime_error("Failed to get destination DC for diff.");
+        }
+
+        if (::BitBlt(dstWrapper.get(), 0, 0, diffWidth, diffHeight, srcWrapper.get(), minX, minY, SRCCOPY) == FALSE) {
             throw std::runtime_error("BitBlt for diff failed.");
         }
-        ScreenImage.ReleaseDC();
-        diffImage.ReleaseDC();
 
         // 保存差异图像为 PNG
         IStream* pStreamRaw = nullptr;
-        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
         if (FAILED(hr)) {
             throw std::runtime_error("CreateStreamOnHGlobal failed for diff.");
         }
         ScopedStream pStream(pStreamRaw);
 
-        hr = diffImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
-        if (FAILED(hr)) {
-            throw std::runtime_error("Failed to save diff image.");
+        try {
+            SaveCImageToStreamFallback(diffImage, pStream.get());
+        } catch (const std::exception& ex) {
+            std::ostringstream oss;
+            oss << "Failed to save diff image: " << ex.what();
+            throw std::runtime_error(oss.str());
         }
 
         HGLOBAL hGlobal = nullptr;
@@ -235,9 +456,17 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
         }
         ScopedStream pStream(pStreamRaw);
 
-        hr = ScreenImage.Save(pStream.get(), Gdiplus::ImageFormatPNG);
-        if (FAILED(hr)) {
-            throw std::runtime_error("Failed to save image to stream.");
+        try {
+            SaveCImageToStreamFallback(ScreenImage, pStream.get());
+        } catch (const std::exception& ex) {
+            int sW = ScreenImage.GetWidth();
+            int sH = ScreenImage.GetHeight();
+            int sBpp = ScreenImage.GetBPP();
+            const void* sBits = ScreenImage.GetBits();
+            std::ostringstream oss;
+            oss << "Failed to save image to stream: " << ex.what()
+                << " src(w=" << sW << " h=" << sH << " bpp=" << sBpp << " bitsPtr=" << sBits << ")";
+            throw std::runtime_error(oss.str());
         }
 
         HGLOBAL hGlobal = nullptr;
@@ -270,6 +499,53 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
 
 // 算法工厂：生成屏幕数据（检测差异并创建数据包）
 inline std::vector<BYTE> GenerateScreenData(const CImage& screenImage, const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height, int bitPerPixel) {
-    auto [minX, minY, maxX, maxY] = DetectScreenDiffCompetitive(prevPixels, currPixels, width, height);
+    // 增加健壮性检查：如果传入的 CImage 对象无效，则直接返回空数据包，防止崩溃
+    if (screenImage.IsNull()) {
+        std::cerr << "Error: GenerateScreenData received a null CImage object." << std::endl;
+        return {}; // 返回一个空 vector
+    }
+
+    std::cout << "[GenerateScreenData] ENTRY: width=" << width << " height=" << height
+              << " prevBytes=" << prevPixels.size() << " currBytes=" << currPixels.size()
+              << " bpp=" << bitPerPixel << std::endl;
+    // 基本健壮性校验：宽高与像素缓冲
+    if (width <= 0 || height <= 0) {
+        throw std::invalid_argument("GenerateScreenData: invalid width/height");
+    }
+    
+    int bytesPerPixel = bitPerPixel / 8;
+    if (bytesPerPixel <= 0) bytesPerPixel = 4; // Fallback
+    const size_t expectedSize = static_cast<size_t>(width) * static_cast<size_t>(height) * bytesPerPixel;
+    
+    // 如果当前帧像素大小异常，按首次帧处理
+    if (currPixels.size() < expectedSize) {
+        std::cout << "[GenerateScreenData] currPixels size mismatch: got " << currPixels.size() 
+                  << " expected " << expectedSize << " - treating as full screen" << std::endl;
+        return CreateScreenData(screenImage, 0, 0, width - 1, height - 1, width, height, bitPerPixel);
+    }
+
+    std::cout << "[GenerateScreenData] Calling DetectScreenDiff..." << std::endl;
+
+    // 使用稳定的自定义差异算法，避免竞争/计时引入的潜在未定义行为
+    auto [minX, minY, maxX, maxY] = DetectScreenDiff(prevPixels, currPixels, width, height, bytesPerPixel);
+
+    std::cout << "[GenerateScreenData] DetectScreenDiff returned: minX=" << minX << " minY=" << minY 
+              << " maxX=" << maxX << " maxY=" << maxY << std::endl;
+
+    // 边界收缩，避免 ROI 越界
+    if (minX < 0) minX = 0;
+    if (minY < 0) minY = 0;
+    if (maxX >= width) maxX = width - 1;
+    if (maxY >= height) maxY = height - 1;
+
+    // 若收缩后无效，按无变化处理（将触发全屏头部分支）
+    if (minX > maxX || minY > maxY) {
+        std::cout << "[GenerateScreenData] After bounds checking: invalid ROI detected, treating as no changes" << std::endl;
+        minX = 1; minY = 1; maxX = 0; maxY = 0; // 无变化矩形
+    }
+
+    // 记录调试信息
+    std::cout << "[GenerateScreenData] Final ROI: (" << minX << "," << minY << ")-(" << maxX << "," << maxY << ")"
+              << " size=" << width << "x" << height << " currBytes=" << currPixels.size() << std::endl;
     return CreateScreenData(screenImage, minX, minY, maxX, maxY, width, height, bitPerPixel);
 }
