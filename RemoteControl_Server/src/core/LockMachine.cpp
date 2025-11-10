@@ -10,8 +10,33 @@ static std::atomic<bool> g_isLocked = false;
 static std::atomic<DWORD> g_lockThreadId = 0;
 static CLockDialog* g_lockDialog = nullptr;
 static std::mutex g_lockMutex; // Protects access to g_lockDialog and related state changes
+static HHOOK g_keyboardHook = NULL;
+static HHOOK g_mouseHook = NULL;
 
 #define WM_APP_UNLOCK_MACHINE (WM_APP + 1)
+
+// Low-level keyboard hook procedure
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+            // Post a message to the UI thread to unlock the machine
+            if (g_lockThreadId != 0) {
+                PostThreadMessage(g_lockThreadId, WM_APP_UNLOCK_MACHINE, 0, 0);
+            }
+            return 1; // Block the key press from being processed further
+        }
+    }
+    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+}
+
+// Low-level mouse hook procedure
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        // Block all mouse events
+        return 1;
+    }
+    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+}
 
 // Thread function to create and manage the lock UI
 UINT LockUIThread(LPVOID pParam) {
@@ -41,10 +66,42 @@ UINT LockUIThread(LPVOID pParam) {
             }
         }
 
-        g_lockDialog->ShowWindow(SW_SHOWMAXIMIZED); // Show maximized to cover the screen
+        // 修改窗口显示方式为居中
+        g_lockDialog->ShowWindow(SW_SHOWNORMAL); // 显示正常大小窗口
+        CRect rect;
+        g_lockDialog->GetWindowRect(&rect);
+        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        int x = (screenWidth - rect.Width()) / 2;
+        int y = (screenHeight - rect.Height()) / 2;
+        g_lockDialog->SetWindowPos(NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+        // 将窗口设置为最顶层
+        g_lockDialog->SetWindowPos(&CWnd::wndTopMost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+
+        // 隐藏鼠标光标
         ShowCursor(FALSE);
 
-        // Message loop for the UI thread
+        // 限制鼠标移动范围到锁机窗口内
+        RECT lockRect;
+        g_lockDialog->GetWindowRect(&lockRect);
+        ClipCursor(&lockRect);
+
+        // Install low-level hooks
+        g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, AfxGetInstanceHandle(), 0);
+        g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, AfxGetInstanceHandle(), 0);
+        if (!g_keyboardHook || !g_mouseHook) {
+            std::cerr << "LockUIThread: Failed to install hooks." << std::endl;
+            if(g_keyboardHook) UnhookWindowsHookEx(g_keyboardHook);
+            if(g_mouseHook) UnhookWindowsHookEx(g_mouseHook);
+            g_keyboardHook = NULL;
+            g_mouseHook = NULL;
+            // Proceed with cleanup
+        } else {
+            std::cout << "LockUIThread: Hooks installed successfully." << std::endl;
+        }
+
+        // Message loop to keep the thread alive and process messages
         while (GetMessage(&msg, NULL, 0, 0)) {
             if (msg.message == WM_APP_UNLOCK_MACHINE) {
                 std::cout << "LockUIThread: Received WM_APP_UNLOCK_MACHINE. Exiting." << std::endl;
@@ -68,7 +125,22 @@ UINT LockUIThread(LPVOID pParam) {
 
     // Cleanup
     std::cout << "LockUIThread: Cleaning up and exiting." << std::endl;
+    
+    // Uninstall hooks
+    if (g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = NULL;
+        std::cout << "LockUIThread: Keyboard hook uninstalled." << std::endl;
+    }
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = NULL;
+        std::cout << "LockUIThread: Mouse hook uninstalled." << std::endl;
+    }
+
+    // 恢复鼠标光标和移动范围
     ShowCursor(TRUE);
+    ClipCursor(NULL);
     
     {
         std::lock_guard<std::mutex> lock(g_lockMutex);

@@ -82,6 +82,7 @@
     <ClInclude Include="include\ui\LockDialog.h">
       <Filter>include\ui</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">
@@ -93,12 +94,10 @@
     <ClCompile Include="src\network\ServerSocket.cpp">
       <Filter>src\network</Filter>
     </ClCompile>
-    <ClCompile Include="src\core\fileSystem.cpp">
-      <Filter>src\core</Filter>
-    </ClCompile>
     <ClCompile Include="src\ui\LockDialog.cpp">
       <Filter>src\ui</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\LockMachine.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RemoteControl_server.rc">

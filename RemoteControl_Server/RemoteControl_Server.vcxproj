@@ -170,6 +170,7 @@
     <ClInclude Include="include\core\diffAlgorithm.h" />
     <ClInclude Include="include\core\LockMachine.h" />
     <ClInclude Include="include\ui\LockDialog.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">

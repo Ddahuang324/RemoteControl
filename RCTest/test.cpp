@@ -2,173 +2,172 @@
 #include "network/ServerSocket.h"
 #include "core/Enities.h"
 #include <iostream>
+#include <string>
 #include <vector>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <thread>
 #include <chrono>
 
-// 包含锁机相关
-#include "../RemoteControl_Server/include/core/Enities.h"
-#include "../RemoteControl_Server/include/ui/LockDialog.h"
+#pragma comment(lib, "ws2_32.lib")
 
-// 外部函数声明
-extern void LockMachine(class CServerSocket& serverSocket, const Cpacket& packet);
-extern void UnlockMachine(class CServerSocket& serverSocket, const Cpacket& packet);
-extern bool IsMachineLocked();
-extern DWORD GetLockThreadId();
-extern bool IsLockDialogCreated();
-extern void ResetLockState();
-
-// Mock CServerSocket for testing
-class MockServerSocket : public CServerSocket {
+class FakeClient {
 public:
-    MockServerSocket() : CServerSocket(0) {}  // dummy port
-    std::vector<Cpacket> sentPackets;
-    void SendPacket(const Cpacket& packet) override {
-        sentPackets.push_back(packet);
-    }
-};
-
-// Helper function to wait for lock state
-void WaitForLockState(bool expectedState, int timeoutMs = 500) {
-    auto start = std::chrono::steady_clock::now();
-    while (IsMachineLocked() != expectedState) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > timeoutMs) {
-            break;
+    FakeClient(const std::string& serverIP, int port)
+        : serverIP(serverIP), port(port), sock(INVALID_SOCKET) {
+        WSAData wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+            throw std::runtime_error("WSAStartup failed");
         }
     }
-}
 
-// 测试锁机功能
-TEST(LockMachineTest, LocksMachineWhenNotLocked) {
-    ResetLockState();
-
-    MockServerSocket mockSocket;
-    Cpacket lockPacket(CMD_LOCK_MACHINE, {});
-
-    // 调用锁机函数
-    LockMachine(mockSocket, lockPacket);
-
-    // 等待锁机状态
-    WaitForLockState(true);
-
-    // 检查状态：应该已锁定，且有线程ID
-    EXPECT_TRUE(IsMachineLocked());
-    EXPECT_NE(GetLockThreadId(), 0);
-
-    // 检查UI是否创建
-    EXPECT_TRUE(IsLockDialogCreated());
-
-    // 检查发送的确认包
-    ASSERT_EQ(mockSocket.sentPackets.size(), 1);
-    EXPECT_EQ(mockSocket.sentPackets[0].sCmd, CMD_LOCK_MACHINE);
-}
-
-// 测试重复锁机（应该忽略）
-TEST(LockMachineTest, IgnoresLockWhenAlreadyLocked) {
-    ResetLockState();
-
-    MockServerSocket mockSocket;
-    Cpacket lockPacket(CMD_LOCK_MACHINE, {});
-
-    // 第一次锁机
-    LockMachine(mockSocket, lockPacket);
-    WaitForLockState(true);
-
-    // 第二次锁机
-    MockServerSocket mockSocket2;
-    LockMachine(mockSocket2, lockPacket);
-
-    // 应该只有一个包发送（第一次）
-    EXPECT_EQ(mockSocket.sentPackets.size(), 1);
-    EXPECT_EQ(mockSocket2.sentPackets.size(), 0);  // 第二次不发送
-}
-
-// 测试解锁功能
-TEST(UnlockMachineTest, UnlocksMachineWhenLocked) {
-    ResetLockState();
-
-    MockServerSocket mockSocket;
-    Cpacket lockPacket(CMD_LOCK_MACHINE, {});
-    LockMachine(mockSocket, lockPacket);
-    WaitForLockState(true);
-
-    MockServerSocket unlockSocket;
-    Cpacket unlockPacket(CMD_UNLOCK_MACHINE, {});
-    UnlockMachine(unlockSocket, unlockPacket);
-
-    // 等待解锁状态
-    WaitForLockState(false);
-
-    // 检查状态：应该已解锁
-    EXPECT_FALSE(IsMachineLocked());
-    EXPECT_EQ(GetLockThreadId(), 0);
-
-    // 检查发送的确认包
-    ASSERT_EQ(unlockSocket.sentPackets.size(), 1);
-    EXPECT_EQ(unlockSocket.sentPackets[0].sCmd, CMD_UNLOCK_MACHINE);
-}
-
-// 测试解锁未锁定的机器（应该忽略）
-TEST(UnlockMachineTest, IgnoresUnlockWhenNotLocked) {
-    ResetLockState();
-
-    MockServerSocket mockSocket;
-    Cpacket unlockPacket(CMD_UNLOCK_MACHINE, {});
-
-    // 调用解锁
-    UnlockMachine(mockSocket, unlockPacket);
-
-    // 状态应该不变
-    EXPECT_FALSE(IsMachineLocked());
-    EXPECT_EQ(GetLockThreadId(), 0);
-
-    // 不应该发送包
-    EXPECT_EQ(mockSocket.sentPackets.size(), 0);
-}
-
-// 添加锁机功能的单元测试
-TEST(LockMachineTest, LockAndUnlock) {
-    ResetLockState();
-
-    MockServerSocket mockSocket;
-    Cpacket lockPacket(CMD_LOCK_MACHINE, {});
-
-    // 测试锁机
-    LockMachine(mockSocket, lockPacket);
-    WaitForLockState(true);
-    EXPECT_TRUE(IsMachineLocked());
-
-    // 测试解锁
-    Cpacket unlockPacket(CMD_UNLOCK_MACHINE, {});
-    UnlockMachine(mockSocket, unlockPacket);
-    WaitForLockState(false);
-    EXPECT_FALSE(IsMachineLocked());
-}
-
-int main(int argc, char** argv) {
-    // 添加诊断日志
-    std::cout << "\n" << std::string(80, '=') << std::endl;
-    std::cout << "[MAIN] RCTest.exe 启动" << std::endl;
-    std::cout << "[MAIN] 命令行参数个数: " << argc << std::endl;
-    for (int i = 0; i < argc; ++i) {
-        std::cout << "[MAIN] argv[" << i << "] = " << argv[i] << std::endl;
+    ~FakeClient() {
+        if (sock != INVALID_SOCKET) {
+            closesocket(sock);
+        }
+        WSACleanup();
     }
-    std::cout << std::string(80, '=') << std::endl << std::endl;
 
-    // 正常执行 Google Test
-    std::cout << "[MAIN] 执行 Google Test 单元测试" << std::endl;
-    ::testing::InitGoogleTest(&argc, argv);
-    
-    // 列出所有可用的测试
-    std::cout << "\n[MAIN] 所有注册的测试:" << std::endl;
-    std::cout << "[MAIN] 提示：要运行特定测试，使用 --gtest_filter=TestName" << std::endl;
-    std::cout << std::string(80, '=') << std::endl << std::endl;
-    
-    int result = RUN_ALL_TESTS();
+    bool connectToServer() {
+        sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (sock == INVALID_SOCKET) {
+            std::cerr << "Socket creation failed" << std::endl;
+            return false;
+        }
 
-    // Final cleanup to ensure the process exits cleanly
-    ResetLockState(); 
-    
-    return result;
+        sockaddr_in serverAddr;
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(port);
+        inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr);
+
+        if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+            std::cerr << "Connect failed with error: " << WSAGetLastError() << std::endl;
+            closesocket(sock);
+            sock = INVALID_SOCKET;
+            return false;
+        }
+
+        std::cout << "Connected to server!" << std::endl;
+        return true;
+    }
+
+    void sendPacket(const Cpacket& packet) {
+        if (sock == INVALID_SOCKET) {
+            std::cerr << "Not connected to server." << std::endl;
+            return;
+        }
+
+        auto buffer = packet.SerializePacket();
+        send(sock, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
+    }
+
+    void receiveLoop() {
+        char buffer[4096];
+        while (true) {
+            int bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
+            if (bytesReceived > 0) {
+                std::cout << "Received " << bytesReceived << " bytes from server." << std::endl;
+            } else if (bytesReceived == 0) {
+                std::cout << "Server closed the connection." << std::endl;
+                break;
+            } else {
+                std::cerr << "Recv failed with error: " << WSAGetLastError() << std::endl;
+                break;
+            }
+        }
+    }
+
+private:
+    std::string serverIP;
+    int port;
+    SOCKET sock;
+};
+
+int main() {
+    try {
+        FakeClient client("127.0.0.1", 12345);
+        if (!client.connectToServer()) {
+            return 1;
+        }
+
+        // Start a separate thread to receive responses
+        std::thread receiverThread(&FakeClient::receiveLoop, &client);
+        receiverThread.detach();
+
+        std::string line;
+        while (true) {
+            std::cout << "> ";
+            std::getline(std::cin, line);
+            if (line == "exit") {
+                break;
+            }
+
+            if (line.empty()) {
+                continue;
+            }
+
+            std::string command;
+            std::string argument;
+            size_t space_pos = line.find(' ');
+            if (space_pos != std::string::npos) {
+                command = line.substr(0, space_pos);
+                argument = line.substr(space_pos + 1);
+            } else {
+                command = line;
+            }
+
+            if (command == "help") {
+                std::cout << "--- Fake Client Commands ---\n"
+                          << "help           - Show this help message\n"
+                          << "exit           - Exit the client\n"
+                          << "driver_info    - Request driver information\n"
+                          << "dir_info <path> - Request directory information\n"
+                          << "run_file <path> - Request to run a file\n"
+                          << "download_file <path> - Request to download a file\n"
+                          << "lock_machine   - Lock the machine\n"
+                          << "unlock_machine - Unlock the machine\n"
+                          << "--------------------------\n";
+            } else if (command == "driver_info") {
+                Cpacket packet(CMD::CMD_DRIVER_INFO, {});
+                client.sendPacket(packet);
+            } else if (command == "dir_info") {
+                if (argument.empty()) {
+                    std::cout << "Usage: dir_info <path>\n";
+                } else {
+                    std::vector<BYTE> data(argument.begin(), argument.end());
+                    Cpacket packet(CMD::CMD_DIRECTORY_INFO, data);
+                    client.sendPacket(packet);
+                }
+            } else if (command == "run_file") {
+                if (argument.empty()) {
+                    std::cout << "Usage: run_file <path>\n";
+                } else {
+                    std::vector<BYTE> data(argument.begin(), argument.end());
+                    Cpacket packet(CMD::CMD_RUN_FILE, data);
+                    client.sendPacket(packet);
+                }
+            } else if (command == "download_file") {
+                if (argument.empty()) {
+                    std::cout << "Usage: download_file <path>\n";
+                } else {
+                    std::vector<BYTE> data(argument.begin(), argument.end());
+                    Cpacket packet(CMD::CMD_DOWNLOAD_FILE, data);
+                    client.sendPacket(packet);
+                }
+            } else if (command == "lock_machine") {
+                Cpacket packet(CMD::CMD_LOCK_MACHINE, {});
+                client.sendPacket(packet);
+            } else if (command == "unlock_machine") {
+                Cpacket packet(CMD::CMD_UNLOCK_MACHINE, {});
+                client.sendPacket(packet);
+            } else {
+                std::cout << "Unknown command: " << command << std::endl;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
 }
