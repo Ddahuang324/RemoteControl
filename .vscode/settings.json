@@ -68,6 +68,8 @@
         "set": "cpp",
         "stop_token": "cpp",
         "thread": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "mutex": "cpp",
+        "condition_variable": "cpp"
     }
 }

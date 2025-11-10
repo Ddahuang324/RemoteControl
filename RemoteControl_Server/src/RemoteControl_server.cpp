@@ -9,6 +9,7 @@
 #include "fileSystem.h"
 #include "InputeSimulator.h"
 #include "screenCapture.h"
+#include "LockMachine.h"
 #include <sstream>
 
 #ifdef _DEBUG
@@ -95,6 +96,15 @@ int main()
                       case CMD::CMD_SCREEN_CAPTURE: {
                           CaptureScreen(serverSocket, packet);
                           break;
+                      }
+                      case CMD::CMD_LOCK_MACHINE: {
+                            
+                            LockMachine(serverSocket, packet);
+                            break;
+                      }
+                      case CMD::CMD_UNLOCK_MACHINE: {
+                            UnlockMachine(serverSocket, packet);
+                            break;
                       }
                       default: {
                           std::string errMsg = "Unknown command";

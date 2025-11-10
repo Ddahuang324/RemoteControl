@@ -84,7 +84,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -106,7 +106,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -125,7 +125,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -146,7 +146,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -168,6 +168,8 @@
     <ClInclude Include="include\core\InputeSimulator.h" />
     <ClInclude Include="include\core\screenCapture.h" />
     <ClInclude Include="include\core\diffAlgorithm.h" />
+    <ClInclude Include="include\core\LockMachine.h" />
+    <ClInclude Include="include\ui\LockDialog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\pch\pch.cpp">
@@ -178,6 +180,8 @@
     </ClCompile>
     <ClCompile Include="src\RemoteControl_server.cpp" />
     <ClCompile Include="src\network\ServerSocket.cpp" />
+    <ClCompile Include="src\core\LockMachine.cpp" />
+    <ClCompile Include="src\ui\LockDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RemoteControl_server.rc" />

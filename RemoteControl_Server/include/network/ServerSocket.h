@@ -1,5 +1,4 @@
 #pragma once
-#include "pch.h"
 #include "../pch/framework.h"
 #include "Enities.h"
 #include <numeric>
@@ -171,7 +170,7 @@ public:
 		}
 	}
 	
-	void SendPacket(const Cpacket& packet) {
+	virtual void SendPacket(const Cpacket& packet) {
 		auto buffer = packet.SerializePacket();
 		send(m_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
 	}
