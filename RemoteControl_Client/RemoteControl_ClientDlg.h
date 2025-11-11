@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include "clientSocket.h"
 
 // CRemoteControlClientDlg 对话框
 class CRemoteControlClientDlg : public CDialogEx
@@ -31,4 +31,6 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedBtnTest();
 };

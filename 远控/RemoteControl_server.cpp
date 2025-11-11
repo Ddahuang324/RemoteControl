@@ -328,6 +328,13 @@ int UnlockMachine() {
     return 0; 
 }
 
+int TestConnect() {
+    Cpacket pack(2002, NULL, 0); //发送回执
+	TRACE("测试连接命令收到，发送回执\n");
+    bool ret = CServerSocket::GetInstance().Send(pack);
+	TRACE("测试连接命令回执发送结果： %d\n", ret);
+    return 0;
+}
 int sendScreen() {
     CImage screen;//适合GDI编程的 库 atlimage.h ,GDI:Graphics Device Interface
     HDC hScreen = ::GetDC(NULL);
@@ -375,6 +382,47 @@ int sendScreen() {
     
     return 0;
 }
+
+
+int ExcuteCommand(int nCmd) {
+    int ret = 0;
+    Cpacket* pPacket = &CServerSocket::GetInstance().GetPacket();
+    if (pPacket == nullptr) return -1;
+
+    switch (nCmd) {
+    case 1:
+        ret = MakeDriverInfo();
+        break;
+    case 2:
+        ret = MakeDirectoryInfo();
+        break;
+    case 3:
+        ret = RunFile();
+        break;
+    case 4:
+        ret = DownLoadFile(); //下载文件
+        break;
+    case 5:
+        ret = MouseEvent();
+        break;
+    case 6://发送屏幕内容(发送屏幕截图)
+        ret = sendScreen();
+        break;
+    case 7: //锁定机器
+        ret = LockMachine();
+        //Sleep(500);
+        //LockMachine();
+        break;
+    case 8: //解锁机器
+        ret = UnlockMachine();
+        break;
+    case 2002:
+        ret = TestConnect();
+    default:
+        break;
+    }
+    return ret;
+}
 int main()
     {
         int nRetCode = 0;
@@ -392,52 +440,43 @@ int main()
             }
             else
             {
-                // TODO: 在此处为应用程序的行为编写代码。
-                //server;
-                // TODO: 在此处为应用程序的行为编写代码。
-            /*
-            *
-            */
-               
-                int nCmd = 7;
+                AllocConsole(); // 分配控制台
+                FILE* pFile;
+                freopen_s(&pFile, "CONOUT$", "w", stdout); // 重定向 stdout 到控制台
+                wprintf(L"控制台初始化成功。\n");
 
-                switch (nCmd) {
-                case 1:
-                    MakeDriverInfo();
-                    break;
-                case 2:
-                    MakeDirectoryInfo();
-                    break;
-                case 3:
-                    RunFile();
-                    break;
-                case 4:
-                    DownLoadFile(); //下载文件
-					break;
-                case 5:
-                    MouseEvent();
-                    break; 
-                case 6://发送屏幕内容(发送屏幕截图)
-                    sendScreen();
-                    break;
-                case 7: //锁定机器
-                    LockMachine();
-                    //Sleep(500);
-                    //LockMachine();
-                    break;
-                case 8: //解锁机器
-                    UnlockMachine();
-                    break;
-                default:
-                    break;
+                // TODO: 在此处为应用程序的行为编写代码。
+				CServerSocket& serverSocket =CServerSocket::GetInstance();
+				int count = 0;
+                if (!serverSocket.initSocket()) {
+                    wprintf(L"错误: 初始化套接字失败\n");
+                    return -1;
+				}
+                wprintf(L"服务器启动，等待客户端连接...\n");
+                while (true){
+                    if(serverSocket.AcceptClient() == false){
+                        if(count >= 3){
+                            wprintf(L"错误: 客户端连接失败超过3次，程序退出。\n");
+                            exit(0);
+						}
+						wprintf(L"等待客户端连接失败，重试中...\n");
+                        count++;
+                        continue;
+                    }
+					TRACE("客户端连接成功\n");
+                    while (true) {
+                        int cmd = serverSocket.DealCommand();
+                        if (cmd > 0) {
+                            TRACE("收到命令: %d\r\n", cmd);
+                            ExcuteCommand(cmd);
+                            continue;
+                        }
+                        wprintf(L"错误: 处理命令失败\n");
+                        break;
+                    }
+                    serverSocket.CloseClient();
+                       
                 }
-                Sleep(5000);
-                UnlockMachine();
-
-                while(dlg.m_hWnd != NULL || dlg.m_hWnd != INVALID_HANDLE_VALUE){
-                   Sleep(100);
-                }
-              
             }
         }
         else

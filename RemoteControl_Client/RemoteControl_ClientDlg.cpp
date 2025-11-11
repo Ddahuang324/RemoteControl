@@ -1,5 +1,4 @@
-﻿
-// RemoteControl_ClientDlg.cpp: 实现文件
+﻿// RemoteControl_ClientDlg.cpp: 实现文件
 //
 
 #include "pch.h"
@@ -7,6 +6,7 @@
 #include "RemoteControl_Client.h"
 #include "RemoteControl_ClientDlg.h"
 #include "afxdialogex.h"
+#include "resource.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -65,6 +65,7 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BTN_TEST, &CRemoteControlClientDlg::OnBnClickedBtnTest)
 END_MESSAGE_MAP()
 
 
@@ -151,5 +152,27 @@ void CRemoteControlClientDlg::OnPaint()
 HCURSOR CRemoteControlClientDlg::OnQueryDragIcon()
 {
 	return static_cast<HCURSOR>(m_hIcon);
+}
+
+
+
+
+void CRemoteControlClientDlg::OnBnClickedBtnTest()
+{
+  	CClientSocket& clientSocket = CClientSocket::GetInstance();
+	bool bRet = clientSocket.initSocket("127.0.0.1");
+	if(!bRet ){
+		MessageBox(L"连接失败！");
+		return;
+	}
+	Cpacket pkt(2002, NULL, 0);
+	bRet = clientSocket.Send(pkt);
+	if(bRet == false){
+		MessageBox(L"发送失败！");
+		return;
+	}
+	int cmd =clientSocket.DealCommand();
+	TRACE("ack : %d\n",cmd);
+	clientSocket.CloseSocket();
 }
 

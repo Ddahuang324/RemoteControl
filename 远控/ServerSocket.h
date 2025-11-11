@@ -83,6 +83,8 @@ public:
     int Size() {//�����ݴ�С
 		return nLength + 2 + 4;
     }
+
+  
 	const char* Data() {//������ָ��
 		strOut.resize(nLength + 6);
 		BYTE* pData = (BYTE*)strOut.c_str();
@@ -197,16 +199,9 @@ public:
     }
     bool AcceptClient() {
         sockaddr_in client_addr;
-        char buffer[1024]; // buffer δʹ�õ��� C4101
         int client_addr_size = sizeof(SOCKADDR);
         m_client = accept(m_serv, (SOCKADDR*)&client_addr, &client_addr_size);
-        if (m_client == -1)  return false;
-
-        // ʹ�� buffer������δ���þ���
-        int recvLen = recv(m_client, buffer, sizeof(buffer), 0);
-        if (recvLen > 0) {
-            // ���Ը���ʵ�����������յ�������
-        }
+        if (m_client == INVALID_SOCKET) return false;
 
         return true;
     }
@@ -217,11 +212,18 @@ public:
         if (m_client == -1) return false;
         //char Buffer[1024] = " ";
 		auto Buffer = std::make_unique < char[]> (BUFFER_SIZE);
+        if(Buffer == nullptr){
+            TRACE("Buffer is nullptr\n");
+            return -2;
+        }
 		memset(Buffer.get(), 0, BUFFER_SIZE);
         size_t index = 0;
         while (true) {
             int len = recv(m_client, Buffer.get() + index, BUFFER_SIZE - index, 0);
-            if (len <= 0) return -1;
+            if (len <= 0) {
+                delete[] Buffer.release();
+                return -1;
+            }
 			index += len;
 			len = index;
 			m_packet = Cpacket (reinterpret_cast<const BYTE*>(Buffer.get()), (size_t&)len);
@@ -229,9 +231,11 @@ public:
             if (len > 0) {
 				memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
 				index -= len;
+                delete[] Buffer.release();
                 return m_packet.sCmd;
             }
         } 
+        delete[] Buffer.release();
 		return -1;
     }
 
@@ -240,6 +244,7 @@ public:
         return send(m_client, (const char*)pData, size, 0) > 0;
     }
     bool Send(Cpacket& pkt) {
+		TRACE("m_client=%d\n", m_client);
         if (m_client == -1) return false;
 		return send(m_client,  pkt.Data(), pkt.Size(), 0) > 0;
 	}
@@ -258,5 +263,14 @@ public:
             return true; 
         }
         return false;
+    }
+
+    operator bool() const { return m_client != INVALID_SOCKET; }
+
+    Cpacket& GetPacket() {
+        return m_packet;
+    }
+    void CloseClient() {
+        closesocket(m_client);
     }
 };  
