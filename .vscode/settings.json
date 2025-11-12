@@ -70,6 +70,7 @@
         "thread": "cpp",
         "xtree": "cpp",
         "mutex": "cpp",
-        "condition_variable": "cpp"
+        "condition_variable": "cpp",
+        "array": "cpp"
     }
 }

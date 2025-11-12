@@ -65,6 +65,7 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BUTTON1, &CRemoteControlClientDlg::OnBnClickedButton1)
 END_MESSAGE_MAP()
 
 
@@ -153,3 +154,32 @@ HCURSOR CRemoteControlClientDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+void CRemoteControlClientDlg::OnBnClickedButton1()
+{
+	if(m_clientSocket.connectToServer("127.0.0.1", 12345)){
+		MessageBox(L"连接成功！");
+		return;
+	}
+
+	std::vector<BYTE> data;
+	Cpacket packet(2022, data);
+
+	if(!m_clientSocket.SendPacket(packet)){
+		MessageBox(L"发送数据失败！");
+		m_clientSocket.CloseSocket();
+		return;
+	}
+
+	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+
+	if(!recvPacket){
+		MessageBox(L"接收数据失败！");
+		m_clientSocket.CloseSocket();
+		return;
+	}else{
+		MessageBox(L"接收数据成功！");
+	}
+
+	m_clientSocket.CloseSocket();
+}

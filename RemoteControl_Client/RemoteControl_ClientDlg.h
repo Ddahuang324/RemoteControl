@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include "clientSocket.h"
 
 // CRemoteControlClientDlg 对话框
 class CRemoteControlClientDlg : public CDialogEx
@@ -24,11 +24,12 @@ public:
 // 实现
 protected:
 	HICON m_hIcon;
-
+	CclientSocket m_clientSocket ;
 	// 生成的消息映射函数
 	virtual BOOL OnInitDialog();
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
+	afx_msg void OnBnClickedButton1();
 	DECLARE_MESSAGE_MAP()
 };

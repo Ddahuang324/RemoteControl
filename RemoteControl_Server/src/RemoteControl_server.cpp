@@ -106,6 +106,13 @@ int main()
                             UnlockMachine(serverSocket, packet);
                             break;
                       }
+                       case CMD::CMD_TEST_CONNECT: {
+                          std::wcout << L"Test Connect (2002) received. Sending ACK." << std::endl;
+                          // 简单地回送一个相同命令字的包作为确认
+                          Cpacket response(CMD::CMD_TEST_CONNECT, {});
+                          serverSocket.SendPacket(response);
+                          break;
+                      }
                       default: {
                           std::string errMsg = "Unknown command";
                           serverSocket.SendErrorPacket(errMsg);

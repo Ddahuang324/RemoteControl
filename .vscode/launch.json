@@ -1,0 +1,55 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+            {
+                "name": "Debug: C++ ",
+                "type": "cppdbg",
+                "request": "launch",
+                "program": "${workspaceFolder}/Debug/${input:executableName}",
+                "args": [],
+                "MIMode": "lldb",
+                "cwd": "${workspaceFolder}",
+                "environment": [
+                    {
+                        "name": "MY_ENV_VAR",
+                        "value": "some_value"
+                    }
+                ]
+            },
+            {
+                "name": "Debug Python",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/path/to/your_main.py",
+                "console": "integratedTerminal",
+                "justMyCode": false,
+                "args": []
+            },
+            {
+                "name": "C++ Processing (LLDB)",
+                "type": "cppdbg",
+                "request": "attach",
+                "program": "${workspaceFolder}/build/${input:executableName}",
+                "processId": "${command:pickProcess}",
+                "MIMode": "lldb",
+                "miDebuggerPath": "/usr/bin/lldb"
+            }
+    ],
+    "compounds": [
+        {
+            "name": "Python + C++",
+            "configurations": [
+                "Debug Python",
+                "C++ Processing (LLDB)"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "executableName",
+            "type": "promptString",
+            "description": "要调试/运行的可执行文件名（在 build 目录下）",
+            "default": "my_executable"
+        }
+    ]
+}
