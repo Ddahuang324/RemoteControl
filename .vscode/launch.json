@@ -1,41 +1,70 @@
 {
     "version": "0.2.0",
     "configurations": [
-            {
-                "name": "Debug: C++ ",
-                "type": "cppdbg",
-                "request": "launch",
-                "program": "${workspaceFolder}/Debug/${input:executableName}",
-                "args": [],
-                "MIMode": "lldb",
-                "cwd": "${workspaceFolder}",
-                "environment": [
-                    {
-                        "name": "MY_ENV_VAR",
-                        "value": "some_value"
-                    }
-                ]
-            },
-            {
-                "name": "Debug Python",
-                "type": "debugpy",
-                "request": "launch",
-                "program": "${workspaceFolder}/path/to/your_main.py",
-                "console": "integratedTerminal",
-                "justMyCode": false,
-                "args": []
-            },
-            {
-                "name": "C++ Processing (LLDB)",
-                "type": "cppdbg",
-                "request": "attach",
-                "program": "${workspaceFolder}/build/${input:executableName}",
-                "processId": "${command:pickProcess}",
-                "MIMode": "lldb",
-                "miDebuggerPath": "/usr/bin/lldb"
-            }
+        {
+            "name": "Debug RemoteControl_Server",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/Debug/RemoteControl_Server.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
+        },
+        {
+            "name": "Debug RemoteControl_Client",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/Debug/RemoteControl_Client.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
+        },
+        {
+            "name": "Debug: C++ ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/Debug/${input:executableName}",
+            "args": [],
+            "MIMode": "lldb",
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "MY_ENV_VAR",
+                    "value": "some_value"
+                }
+            ]
+        },
+        {
+            "name": "Debug Python",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/path/to/your_main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": []
+        },
+        {
+            "name": "C++ Processing (LLDB)",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/${input:executableName}",
+            "processId": "${command:pickProcess}",
+            "MIMode": "lldb",
+            "miDebuggerPath": "/usr/bin/lldb"
+        }
     ],
     "compounds": [
+        {
+            "name": "Debug Both Server and Client",
+            "configurations": [
+                "Debug RemoteControl_Server",
+                "Debug RemoteControl_Client"
+            ]
+        },
         {
             "name": "Python + C++",
             "configurations": [
