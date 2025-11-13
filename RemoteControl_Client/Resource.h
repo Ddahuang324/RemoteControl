@@ -8,6 +8,12 @@
 #define IDD_REMOTECONTROL_CLIENT_DIALOG 102
 #define IDR_MAINFRAME                   128
 #define IDC_BUTTON1                     1000
+#define IDC_BTN_TEST                    1001
+#define IDC_EDIT1                       1002
+#define IDC_IPADDRESS_Serv              1003
+#define IDC_TREE3                       1004
+#define IDC_LIST4                       1005
+#define IDC_BUTTON2                     1006
 
 // Next default values for new objects
 // 

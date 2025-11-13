@@ -2,7 +2,6 @@
 
 #include <string>
 #include <vector>
-#include <optional>
 
 using BYTE = unsigned char;
 using DWORD = unsigned long;
@@ -40,8 +39,6 @@ typedef struct File_Info {
 		serializedData.insert(serializedData.end(), reinterpret_cast<BYTE*>(&pathLen), reinterpret_cast<BYTE*>(&pathLen) + sizeof(DWORD));
 		// 序列化 fullPath 数据
 		serializedData.insert(serializedData.end(), fullPath.begin(), fullPath.end());
-		// 序列化 hasNext (1字节)
-		serializedData.push_back(static_cast<BYTE>(hasNext));
 		return serializedData;
 	}
 

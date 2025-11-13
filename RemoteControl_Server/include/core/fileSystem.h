@@ -33,8 +33,6 @@ std::string GetDriverInfo() {
 int DirectoryInfor(const std::string& path, CServerSocket& ClientSocket){
 	std::filesystem::path targetPath(path);
 
-	std::vector<File_Info> fileInfo;
-
 	try{
 		if (!std::filesystem::exists(targetPath) || !std::filesystem::is_directory(targetPath)) {
 			
@@ -43,23 +41,27 @@ int DirectoryInfor(const std::string& path, CServerSocket& ClientSocket){
 			ClientSocket.SendErrorPacket(errMsg);
 			return -1; // 错误
 		}
-		// 这里添加目录遍历逻辑
-		for(const auto& entry : std::filesystem::directory_iterator(targetPath)){
-			File_Info file;
-			file.isDir = std::filesystem::is_directory(entry.path());
-			file.fullPath = entry.path().string();
-			fileInfo.push_back(file);
+		// 收集所有条目
+		std::vector<std::filesystem::directory_entry> entries;
+		for (const auto& entry : std::filesystem::directory_iterator(targetPath)) {
+			entries.push_back(entry);
 		}
-		// 序列化文件信息
-		std::vector<BYTE> serializedData;
-		for(const auto& file : fileInfo){
-			auto fileData = file.FileInfoSerialize();
-			serializedData.insert(serializedData.end(), fileData.begin(), fileData.end());
+		
+		// 发送每个条目
+		for (size_t i = 0; i < entries.size(); ++i) {
+			const auto& entry = entries[i];
+			try {
+				bool hasNext = (i < entries.size() - 1);
+				File_Info fileInfo(std::filesystem::is_directory(entry.path()), entry.path().filename().string(), hasNext);
+				ClientSocket.SendPacket(Cpacket(CMD::CMD_DIRECTORY_INFO, fileInfo.FileInfoSerialize()));
+			} catch (std::filesystem::filesystem_error& e) {
+				std::cerr << "Error accessing file: " << e.what() << std::endl;
+			}
 		}
-		// 发送序列化数据包
-		Cpacket packet(CMD::CMD_DIRECTORY_INFO, serializedData);
-		ClientSocket.SendPacket(packet);
-
+		
+		// 发送结束包
+		File_Info endOfListPacket(false, "", false);
+		ClientSocket.SendPacket(Cpacket(CMD::CMD_DIRECTORY_INFO, endOfListPacket.FileInfoSerialize()));
 		return 0; // 成功
 	}
 	catch (const std::filesystem::filesystem_error& e) {
@@ -70,6 +72,7 @@ int DirectoryInfor(const std::string& path, CServerSocket& ClientSocket){
 	}
 
 }
+
 
 int RunFile(const std::string& path, CServerSocket& ClientSocket) {
     // 运行文件

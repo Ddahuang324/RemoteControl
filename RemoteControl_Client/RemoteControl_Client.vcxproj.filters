@@ -36,6 +36,9 @@
     <ClInclude Include="clientSocket.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="Enities.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="RemoteControl_Client.cpp">

@@ -71,6 +71,7 @@
         "xtree": "cpp",
         "mutex": "cpp",
         "condition_variable": "cpp",
-        "array": "cpp"
+        "array": "cpp",
+        "codecvt": "cpp"
     }
 }
