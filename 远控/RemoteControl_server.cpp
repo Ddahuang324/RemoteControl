@@ -68,7 +68,11 @@ int MakeDriverInfo() {
 
     Cpacket pack(1, reinterpret_cast<const BYTE*>(result.data()), result.size());
     Dump(reinterpret_cast<const BYTE*>(pack.Data()), pack.Size());
-    //CServerSocket::GetInstance().Send(pack); 
+
+    if (!CServerSocket::GetInstance().Send(pack)) {
+        OutputDebugString(_T("发送驱动器信息失败"));
+        return -1;
+    }
     return 0;
 }
 
@@ -101,7 +105,9 @@ int MakeDirectoryInfo() {
 
 
     do {
+        if (strcmp(fdata.name, ".") == 0 || strcmp(fdata.name, "..") == 0) continue;
         FILEINFO finfo; 
+        finfo.isValid = true;
 		finfo.isDir = (fdata.attrib & _A_SUBDIR) != 0;
         memcpy(finfo.szFileName, fdata.name, strlen(fdata.name));
         //listFileInfo.push_back(finfo);
@@ -111,6 +117,7 @@ int MakeDirectoryInfo() {
     } while (!_findnext(hfind, &fdata));
 
 	FILEINFO finfo;
+	finfo.isValid = true;
 	finfo.hasNext = false;
 
     Cpacket pack(2, (BYTE*)&finfo, sizeof(finfo));

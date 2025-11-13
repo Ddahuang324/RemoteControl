@@ -40,6 +40,13 @@ public:
         sSum = pkt.sSum;
     }
     Cpacket(const BYTE* pData, size_t& nSize) {
+        // 初始化所有成员，防止解析失败时留下未定义值
+        sHead = 0;
+        nLength = 0;
+        sCmd = 0;
+        sSum = 0;
+        strData.clear();
+
         size_t  i = 0;
 
         for (; i < nSize; i++) {
@@ -135,7 +142,7 @@ private:
     CClientSocket(const CClientSocket& ss) {
         m_serv = ss.m_serv;
     }
-    CClientSocket& operator=(const CClientSocket& ss) {}
+    CClientSocket& operator=(const CClientSocket& ss) = default;
     
     CClientSocket() {
         m_serv = INVALID_SOCKET;
@@ -173,7 +180,7 @@ public:
         return instance;
     }
 
-    bool initSocket(const std::string& ip) {
+    bool initSocket(const std::string& ip, int port) {
         if(m_serv != INVALID_SOCKET){
         closesocket(m_serv);
         }
@@ -189,7 +196,7 @@ public:
         if (inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr) != 1) {
             return false;
         }
-        serv_addr.sin_port = htons(12345);
+        serv_addr.sin_port = htons(port);
 
     if (connect(m_serv, (SOCKADDR*)&serv_addr, sizeof(SOCKADDR)) == SOCKET_ERROR) {
         closesocket(m_serv);
@@ -210,6 +217,7 @@ public:
             return -2;
 		}
         memset(Buffer.get(), 0, BUFFER_SIZE);
+        
         size_t index = 0;
         while (true) {
             int len = recv(m_serv, Buffer.get() + index, BUFFER_SIZE - index, 0);

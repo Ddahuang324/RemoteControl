@@ -1,14 +1,15 @@
 #pragma once
 #include "pch.h"
 #include "framework.h"
+#include <ws2tcpip.h>
 
 class Cpacket {
 public:
 	Cpacket() :sHead(0), nLength(0), sCmd(0), sSum(0) {}
     Cpacket(WORD nCmd, const BYTE* pData, size_t nSize) {
 		sHead = 0xFEFF;
-		nLength = nSize + 2 + 2;//���ݳ���=����+������+У���
-		sCmd = nCmd;
+        nLength = nSize + 2 + 2;
+        sCmd = nCmd; // <-- 初始化命令码，避免未初始化内存(调试模式下为0xCCCC)被发送
 
         if (nSize > 0) {
             strData.resize(nSize);
@@ -97,13 +98,13 @@ public:
 		return strOut.c_str();
     }
 public:
-	WORD sHead;//��ͷ,�̶�λFEFF
-	DWORD nLength;//���ݳ���
-	WORD sCmd;//������
-	std::string strData;//����
-	WORD sSum;//У���
+	WORD sHead;
+	DWORD nLength;
+	WORD sCmd;
+	std::string strData;
+	WORD sSum;
 
-	std::string strOut;//�������ݣ����ڵ���
+	std::string strOut;
 };
 
 typedef struct MouseEvent {
@@ -123,7 +124,7 @@ private:
         m_client = ss.m_client;
         m_serv = ss.m_serv;
     }
-    CServerSocket& operator=(const CServerSocket& ss) {}
+    CServerSocket& operator=(const CServerSocket& ss) =default;
     CServerSocket() {
 		m_serv = INVALID_SOCKET;
 		m_client = INVALID_SOCKET;
@@ -141,6 +142,9 @@ private:
             WSACleanup();
             exit(0);
         }
+        // 打印创建的 socket 描述符，便于在终端查看
+        printf("[ServerSocket] created server socket: %llu\n", (unsigned long long)m_serv);
+        fflush(stdout);
         if (InitSocketEnv() == false) {
             // Initialization failed
             MessageBoxW(NULL, L"Initialization failed", L"Error", MB_OK);
@@ -188,12 +192,16 @@ public:
         serv_addr.sin_port = htons(12345);
 
         if (bind(m_serv, (SOCKADDR*)&serv_addr, sizeof(SOCKADDR)) == -1) {
+            printf("[ServerSocket] bind failed on port %d\n", ntohs(serv_addr.sin_port));
+            fflush(stdout);
             return false;
         }
         if (listen(m_serv, 1) == -1) {
+            printf("[ServerSocket] listen failed\n"); fflush(stdout);
             return false;
         }
 
+        printf("[ServerSocket] listening on port %d\n", ntohs(serv_addr.sin_port)); fflush(stdout);
         return true;
 
     }
@@ -203,6 +211,14 @@ public:
         m_client = accept(m_serv, (SOCKADDR*)&client_addr, &client_addr_size);
         if (m_client == INVALID_SOCKET) return false;
 
+        // 使用 inet_ntop 替换 inet_ntoa
+        char ip[INET_ADDRSTRLEN] = {0};
+        if (inet_ntop(AF_INET, &client_addr.sin_addr, ip, sizeof(ip)) == nullptr) {
+            strcpy_s(ip, sizeof(ip), "unknown");
+        }
+        unsigned short port = ntohs(client_addr.sin_port);
+        printf("[ServerSocket] accepted client: %s:%u (sock=%llu)\n", ip, (unsigned)port, (unsigned long long)m_client);
+        fflush(stdout);
         return true;
     }
 
@@ -221,6 +237,8 @@ public:
         while (true) {
             int len = recv(m_client, Buffer.get() + index, BUFFER_SIZE - index, 0);
             if (len <= 0) {
+                printf("[ServerSocket] recv returned %d (client disconnected or error)\n", len);
+                fflush(stdout);
                 delete[] Buffer.release();
                 return -1;
             }
@@ -229,8 +247,11 @@ public:
 			m_packet = Cpacket (reinterpret_cast<const BYTE*>(Buffer.get()), (size_t&)len);
              
             if (len > 0) {
-				memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
-				index -= len;
+                // 已成功解析出一个完整报文
+                printf("[ServerSocket] parsed packet, cmd=%u\n", (unsigned)m_packet.sCmd);
+                fflush(stdout);
+                memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
+                index -= len;
                 delete[] Buffer.release();
                 return m_packet.sCmd;
             }
@@ -241,12 +262,17 @@ public:
 
     bool Send(const void* pData, size_t size) {
         if (m_client == -1) return false;
-        return send(m_client, (const char*)pData, size, 0) > 0;
+        int ret = (int)send(m_client, (const char*)pData, (int)size, 0);
+        printf("[ServerSocket] send -> client sock=%llu, bytes=%zu, ret=%d\n", (unsigned long long)m_client, size, ret);
+        fflush(stdout);
+        return ret > 0;
     }
     bool Send(Cpacket& pkt) {
-		TRACE("m_client=%d\n", m_client);
-        if (m_client == -1) return false;
-		return send(m_client,  pkt.Data(), pkt.Size(), 0) > 0;
+		if (m_client == -1) return false;
+		int ret = (int)send(m_client,  pkt.Data(), pkt.Size(), 0);
+		printf("[ServerSocket] send(pkt) -> client sock=%llu, pkt_size=%d, ret=%d\n", (unsigned long long)m_client, pkt.Size(), ret);
+		fflush(stdout);
+		return ret > 0;
 	}
 
     bool GetFilePath(std::string& strPath) {
@@ -271,6 +297,7 @@ public:
         return m_packet;
     }
     void CloseClient() {
+        printf("[ServerSocket] closing client socket: %llu\n", (unsigned long long)m_client); fflush(stdout);
         closesocket(m_client);
     }
 };  

@@ -1,15 +1,84 @@
 {
-    // 使用 IntelliSense 了解相关属性。 
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "PowerShell: Launch Current File",
-            "type": "PowerShell",
+            "name": "Debug RemoteControl_Server",
+            "type": "cppvsdbg",
             "request": "launch",
-            "script": "${file}",
+            "program": "${workspaceFolder}/Debug/Remote Control_Server.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
+        },
+        {
+            "name": "Debug RemoteControl_Client",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/Debug/RemoteControl_Client.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
+        },
+        {
+            "name": "Debug: C++ ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/Debug/${input:executableName}",
+            "args": [],
+            "MIMode": "lldb",
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "MY_ENV_VAR",
+                    "value": "some_value"
+                }
+            ]
+        },
+        {
+            "name": "Debug Python",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/path/to/your_main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
             "args": []
+        },
+        {
+            "name": "C++ Processing (LLDB)",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/${input:executableName}",
+            "processId": "${command:pickProcess}",
+            "MIMode": "lldb",
+            "miDebuggerPath": "/usr/bin/lldb"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Debug Both Server and Client",
+            "configurations": [
+                "Debug RemoteControl_Server",
+                "Debug RemoteControl_Client"
+            ]
+        },
+        {
+            "name": "Python + C++",
+            "configurations": [
+                "Debug Python",
+                "C++ Processing (LLDB)"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "executableName",
+            "type": "promptString",
+            "description": "要调试/运行的可执行文件名（在 build 目录下）",
+            "default": "my_executable"
         }
     ]
 }
