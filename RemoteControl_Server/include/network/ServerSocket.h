@@ -1,6 +1,7 @@
 #pragma once
 #include "../pch/framework.h"
 #include "Enities.h"
+#include "../utils/ThreadPool.hpp"
 #include <numeric>
 #include <optional>
 #include <string>
@@ -9,6 +10,8 @@
 #include <winsock2.h>
 #include <iostream>
 #include <iomanip>
+#include <memory>
+#include <mutex>
 
 using BYTE = unsigned char;
 using WORD = unsigned short;
@@ -136,7 +139,7 @@ public:
 
 class CServerSocket {
 public:
-	explicit CServerSocket(unsigned short port) {
+	explicit CServerSocket(unsigned short port) : m_threadPool(std::make_unique<ThreadPool>(4)) {
 		m_servSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (m_servSocket == INVALID_SOCKET) {
 			MessageBoxW(NULL, L"Socket creation failed", L"Error", MB_OK);
@@ -171,6 +174,7 @@ public:
 	}
 	
 	virtual void SendPacket(const Cpacket& packet) {
+		std::lock_guard<std::mutex> lock(m_sendMutex);
 		auto buffer = packet.SerializePacket();
 		send(m_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
 	}
@@ -231,6 +235,8 @@ private:
 	std::vector<BYTE> m_recvBuffer;
 	static constexpr size_t BUFFER_SIZE = 4096;
 	WSAInitializer m_wsaInit; 
+	std::unique_ptr<ThreadPool> m_threadPool;
+	std::mutex m_sendMutex;
 
 	
 	void HandleClient(const std::function<void(const Cpacket&)>& packetHAndler) {
@@ -239,7 +245,9 @@ private:
 			if (!packetOpt) {
 				break; // 连接关闭或错误
 			}
-			packetHAndler(*packetOpt);
+			m_threadPool->enqueue([packetHAndler, packet = *packetOpt]() {
+				packetHAndler(packet);
+			});
 		}
 	}
 };

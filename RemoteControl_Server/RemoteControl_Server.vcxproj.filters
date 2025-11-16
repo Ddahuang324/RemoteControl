@@ -49,6 +49,9 @@
     <ClInclude Include="include\utils\RemoteControl_server.h">
       <Filter>include\utils</Filter>
     </ClInclude>
+    <ClInclude Include="include\utils\ThreadPool.hpp">
+      <Filter>include\utils</Filter>
+    </ClInclude>
     <ClInclude Include="include\Resource.h">
       <Filter>include</Filter>
     </ClInclude>

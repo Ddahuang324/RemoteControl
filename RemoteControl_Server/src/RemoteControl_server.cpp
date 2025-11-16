@@ -89,6 +89,13 @@ int main()
                           }
                           break;
                       }
+                      case CMD::CMD_DELETE_FILE: {
+                          if (!packet.data.empty()) {
+                              std::string path(packet.data.begin(), packet.data.end());
+                              DeleteFile(path, serverSocket);
+                          }
+                          break;
+                      }
                       case CMD::CMD_MOUSE_EVENT: {
                           HandleMouseEvent(serverSocket, packet);
                           break;
@@ -97,16 +104,16 @@ int main()
                           CaptureScreen(serverSocket, packet);
                           break;
                       }
-                      case CMD::CMD_LOCK_MACHINE: {
+                        case CMD::CMD_LOCK_MACHINE: {
                             
                             LockMachine(serverSocket, packet);
                             break;
                       }
-                      case CMD::CMD_UNLOCK_MACHINE: {
+                        case CMD::CMD_UNLOCK_MACHINE: {
                             UnlockMachine(serverSocket, packet);
                             break;
                       }
-                       case CMD::CMD_TEST_CONNECT: {
+                        case CMD::CMD_TEST_CONNECT: {
                           std::wcout << L"Test Connect (2002) received. Sending ACK." << std::endl;
                           // 简单地回送一个相同命令字的包作为确认
                           Cpacket response(CMD::CMD_TEST_CONNECT, {});

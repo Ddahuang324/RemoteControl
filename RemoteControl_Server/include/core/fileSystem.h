@@ -128,5 +128,26 @@ int DownloadFile(const std::string& path, CServerSocket& ClientSocket) {
 	return 0;
 }
 
+int DeleteFile(const std::string& path, CServerSocket& ClientSocket) {
+    try {
+        if (std::filesystem::remove(path)) {
+            // 成功删除，发送确认包
+            std::vector<BYTE> pathData(path.begin(), path.end());
+            Cpacket packet(CMD::CMD_DELETE_FILE, pathData);
+            ClientSocket.SendPacket(packet);
+            return 0;
+        } else {
+            // 删除失败
+            std::string errMsg = "Failed to delete file: " + path;
+            ClientSocket.SendErrorPacket(errMsg);
+            return -1;
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::string errMsg = "Filesystem error: " + std::string(e.what());
+        ClientSocket.SendErrorPacket(errMsg);
+        return -1;
+    }
+}
+
 
 

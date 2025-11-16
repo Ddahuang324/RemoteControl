@@ -163,6 +163,7 @@
     <ClInclude Include="include\Resource.h" />
     <ClInclude Include="include\network\ServerSocket.h" />
     <ClInclude Include="include\utils\RemoteControl_server.h" />
+    <ClInclude Include="include\utils\ThreadPool.hpp" />
     <ClInclude Include="include\core\Enities.h" />
     <ClInclude Include="include\core\fileSystem.h" />
     <ClInclude Include="include\core\InputeSimulator.h" />

@@ -72,6 +72,11 @@
         "mutex": "cpp",
         "condition_variable": "cpp",
         "array": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "deque": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp",
+        "future": "cpp",
+        "queue": "cpp"
     }
 }

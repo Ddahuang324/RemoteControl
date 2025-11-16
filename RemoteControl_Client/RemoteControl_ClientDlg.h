@@ -8,6 +8,25 @@
 #include <vector>
 #include <optional>
 #include "Enities.h"
+#include "include\MultiThread\ThreadPool.hpp"
+
+// 前向声明
+class CRemoteControlClientDlg;
+class CDownloadProgressDlg;
+
+// 定义自定义消息
+#define WM_UPDATE_PROGRESS (WM_USER + 1)
+#define WM_CLOSE_PROGRESS (WM_USER + 2)
+
+// 下载参数结构体
+struct DownloadParams {
+    CRemoteControlClientDlg* pDlg;
+    std::string filePath;
+    std::string savePath;
+    std::streamsize fileSize;
+    CclientSocket* pSocket;
+    CDownloadProgressDlg* pProgressDlg;
+};
 
 // CRemoteControlClientDlg 对话框
 
@@ -31,6 +50,8 @@ protected:
 // 实现
 protected:
 	HICON m_hIcon;
+
+// public:
 	CclientSocket m_clientSocket;
 
 		// 新 UI 控件声明（用于补全代码）
@@ -45,9 +66,17 @@ protected:
 		CEdit m_editPort;                 // 端口输入框 IDC_EDIT1
 		CIPAddressCtrl m_ipAddressServ;   // IP 地址控件 IDC_IPADDRESS_Serv
 		CButton m_btnViewFileInfo;        // 查看文件信息按钮 IDC_BUTTON2
+		CButton m_btnConnect;             // 连接按钮 IDC_BTN_TEST
 
 		CString m_strServerIP = L"127.0.0.1"; // 当前服务器IP
 		int m_nServerPort = 9527; // 当前服务器端口，默认9527
+
+		CString m_strCurrentDirPath; // 当前目录路径
+		CString m_strSelectedFile; // 选中的文件
+
+		bool m_bConnected = false; // 连接状态
+
+		ThreadPool m_threadPool; // 线程池
 
 		// 生成的消息映射函数
 		virtual BOOL OnInitDialog()override;
@@ -62,5 +91,11 @@ protected:
 		afx_msg void OnLvnItemchangedList4(NMHDR* pNMHDR, LRESULT* pResult);
 		afx_msg void OnIpnFieldchangedIpaddressServ(NMHDR* pNMHDR, LRESULT* pResult);
 		afx_msg void OnEnChangeEdit1();
+		afx_msg void OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult);
+		afx_msg void OnDownloadFile();
+		afx_msg void OnDeleteFile();
+		afx_msg void OnOpenFile();
+		afx_msg LRESULT OnUpdateProgress(WPARAM wParam, LPARAM lParam);
+		afx_msg LRESULT OnCloseProgress(WPARAM wParam, LPARAM lParam);
 		DECLARE_MESSAGE_MAP()
 };
