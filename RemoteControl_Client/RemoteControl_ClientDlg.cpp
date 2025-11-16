@@ -7,6 +7,7 @@
 #include "RemoteControl_ClientDlg.h"
 #include "afxdialogex.h"
 #include "resource.h"
+#include "DownloadProgressDlg.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -20,6 +21,9 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+// 前向声明
+void DownloadFileTask(DownloadParams params);
 
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -74,6 +78,7 @@ void CRemoteControlClientDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT1, m_Port);
 	DDX_Control(pDX, IDC_TREE3, m_Tree);
 	DDX_Control(pDX, IDC_LIST4, m_List);
+	DDX_Control(pDX, IDC_BTN_TEST, m_btnConnect);
 }
 
 
@@ -90,6 +95,12 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON2, &CRemoteControlClientDlg::OnBnClickedButton2)
 	ON_NOTIFY(TVN_SELCHANGED, IDC_TREE3, &CRemoteControlClientDlg::OnTvnSelchangedTree3)
 	ON_NOTIFY(NM_DBLCLK, IDC_TREE3, &CRemoteControlClientDlg::OnDblclkTree3)
+ON_NOTIFY(NM_RCLICK, IDC_LIST4, &CRemoteControlClientDlg::OnNMRClickList4)
+ON_COMMAND(ID_DOWNLOAD_FILE, &CRemoteControlClientDlg::OnDownloadFile)
+ON_COMMAND(ID_DELETE_FILE, &CRemoteControlClientDlg::OnDeleteFile)
+ON_COMMAND(ID_OPEN_FILE, &CRemoteControlClientDlg::OnOpenFile)
+ON_MESSAGE(WM_UPDATE_PROGRESS, &CRemoteControlClientDlg::OnUpdateProgress)
+ON_MESSAGE(WM_CLOSE_PROGRESS, &CRemoteControlClientDlg::OnCloseProgress)
 END_MESSAGE_MAP()
 
 
@@ -230,15 +241,27 @@ HCURSOR CRemoteControlClientDlg::OnQueryDragIcon()
 
 void CRemoteControlClientDlg::OnBnClickedBtnTest()
 {
-	if (!SendCommandPacket(2002)) return;
-	CClientSocket& clientSocket = CClientSocket::GetInstance();
-	int cmd = clientSocket.DealCommand();
-	if (cmd == 2002) {
-		MessageBox(_T("测试连接成功！"));
+	// 切换连接/断开
+	if (!m_bConnected) {
+		if (!SendCommandPacket(CMD::CMD_TEST_CONNECT)) return;
+		CClientSocket& clientSocket = CClientSocket::GetInstance();
+		int cmd = clientSocket.DealCommand();
+		if (cmd == CMD::CMD_TEST_CONNECT) {
+			MessageBox(_T("连接并保持成功！"));
+			m_bConnected = true;
+			m_btnConnect.SetWindowText(_T("断开连接"));
+			// 不关闭 socket，这里保持长连接以便后续操作
+		} else {
+			MessageBox(_T("接收失败！"));
+			clientSocket.CloseSocket();
+		}
 	} else {
-		MessageBox(_T("接收失败！"));
+		// 断开
+		CClientSocket::GetInstance().CloseSocket();
+		m_bConnected = false;
+		m_btnConnect.SetWindowText(_T("连接"));
+		MessageBox(_T("已断开连接"));
 	}
-	clientSocket.CloseSocket();
 }
 
 
@@ -334,6 +357,7 @@ void CRemoteControlClientDlg::OnTvnSelchangedTree3(NMHDR* pNMHDR, LRESULT* pResu
 	if (hItem == NULL) return;
 
 	CString path = GetItemPath(hItem);
+	m_strCurrentDirPath = path;
 	if (path == _T("Drives")) {
 		// 清空列表和列
 		m_List.DeleteAllItems();
@@ -467,6 +491,11 @@ void CRemoteControlClientDlg::OnDblclkTree3(NMHDR* pNMHDR, LRESULT* pResult)
 		m_Tree.Expand(hItem, TVE_TOGGLE);
 	} else {
 		CString path = GetItemPath(hItem);
+		// 当双击 'Drives' 根节点或空路径时，不触发目录请求，改为刷新驱动器列表
+		if (path.IsEmpty() || path == _T("Drives")) {
+			OnBnClickedButton2();
+			return;
+		}
 		std::string strPath = CT2A(path);
 		if (!SendCommandPacket(2, reinterpret_cast<const BYTE*>(strPath.c_str()), strPath.size())) return;
 		CClientSocket& clientSocket = CClientSocket::GetInstance();
@@ -491,4 +520,188 @@ void CRemoteControlClientDlg::OnDblclkTree3(NMHDR* pNMHDR, LRESULT* pResult)
 		m_Tree.Expand(hItem, TVE_EXPAND);
 		clientSocket.CloseSocket();
 	}
+}
+
+void CRemoteControlClientDlg::OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
+	*pResult = 0;
+
+	CPoint point;
+	GetCursorPos(&point);
+	m_List.ScreenToClient(&point);
+
+	UINT flags = 0;
+	int nItem = m_List.HitTest(point, &flags);
+	if (nItem != -1 && (flags & LVHT_ONITEM)) {
+		m_List.SetItemState(nItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+		CString fileName = m_List.GetItemText(nItem, 0);
+		m_strSelectedFile = fileName;
+
+		CMenu menu;
+		menu.CreatePopupMenu();
+		menu.AppendMenu(MF_STRING, ID_DOWNLOAD_FILE, _T("下载文件"));
+		menu.AppendMenu(MF_STRING, ID_DELETE_FILE, _T("删除文件"));
+		menu.AppendMenu(MF_STRING, ID_OPEN_FILE, _T("打开文件"));
+
+		CPoint screenPoint;
+		GetCursorPos(&screenPoint);
+		menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, screenPoint.x, screenPoint.y, this);
+	}
+}
+
+void CRemoteControlClientDlg::OnDownloadFile()
+{
+	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
+		MessageBox(_T("未选择文件"));
+		return;
+	}
+
+	CFileDialog dlg(FALSE, NULL, m_strSelectedFile, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, _T("All Files (*.*)|*.*||"), this);
+	if (dlg.DoModal() != IDOK) return;
+	CString savePath = dlg.GetPathName();
+
+	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
+	std::string pathUtf = CT2A(fullPath);
+	if (!SendCommandPacket(CMD::CMD_DOWNLOAD_FILE, reinterpret_cast<const BYTE*>(pathUtf.c_str()), pathUtf.size())) {
+		MessageBox(_T("发送下载请求失败"));
+		return;
+	}
+
+	// 创建进度对话框
+	CDownloadProgressDlg* pProgressDlg = new CDownloadProgressDlg(this);
+	pProgressDlg->Create(IDD_DOWNLOAD_PROGRESS_DIALOG, this);
+	pProgressDlg->ShowWindow(SW_SHOW);
+
+	DownloadParams params;
+	params.requestPath = fullPath;
+	params.savePath = savePath;
+	params.fileSize = 0;
+	params.pProgressDlg = pProgressDlg;
+	params.pOwner = this;
+
+	// 启动后台下载
+	m_threadPool.enqueue(DownloadFileTask, params);
+}
+
+void CRemoteControlClientDlg::OnDeleteFile()
+{
+	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
+		MessageBox(_T("未选择文件"));
+		return;
+	}
+	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
+	std::string pathUtf = CT2A(fullPath);
+	if (!SendCommandPacket(CMD::CMD_DELETE_FILE, reinterpret_cast<const BYTE*>(pathUtf.c_str()), pathUtf.size())) {
+		MessageBox(_T("发送删除请求失败"));
+		return;
+	}
+	CClientSocket& client = CClientSocket::GetInstance();
+	int cmd = client.DealCommand();
+	if (cmd == CMD::CMD_DELETE_FILE) {
+		MessageBox(_T("文件删除成功"));
+		// 刷新目录
+		OnBnClickedButton2();
+	} else {
+		MessageBox(_T("删除文件失败"));
+	}
+	client.CloseSocket();
+}
+
+void CRemoteControlClientDlg::OnOpenFile()
+{
+	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
+		MessageBox(_T("未选择文件"));
+		return;
+	}
+	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
+	std::string pathUtf = CT2A(fullPath);
+	if (!SendCommandPacket(CMD::CMD_RUN_FILE, reinterpret_cast<const BYTE*>(pathUtf.c_str()), pathUtf.size())) {
+		MessageBox(_T("发送打开请求失败"));
+		return;
+	}
+	CClientSocket& client = CClientSocket::GetInstance();
+	int cmd = client.DealCommand();
+	if (cmd == CMD::CMD_RUN_FILE) {
+		MessageBox(_T("文件打开成功"));
+	} else {
+		MessageBox(_T("打开文件失败"));
+	}
+	client.CloseSocket();
+}
+
+LRESULT CRemoteControlClientDlg::OnUpdateProgress(WPARAM wParam, LPARAM lParam)
+{
+	// 目前直接由进度对话框更新，无需额外处理
+	return 0;
+}
+
+LRESULT CRemoteControlClientDlg::OnCloseProgress(WPARAM wParam, LPARAM lParam)
+{
+	CDownloadProgressDlg* pDlg = (CDownloadProgressDlg*)lParam;
+	if (pDlg) {
+		pDlg->DestroyWindow();
+		delete pDlg;
+	}
+	return 0;
+}
+
+// 下载后台任务
+void DownloadFileTask(DownloadParams params) {
+	CRemoteControlClientDlg* pDlg = params.pOwner;
+	CDownloadProgressDlg* pProgressDlg = params.pProgressDlg;
+	CClientSocket& client = CClientSocket::GetInstance();
+
+	CFile file;
+	if (!file.Open(params.savePath, CFile::modeCreate | CFile::modeWrite)) {
+		pProgressDlg->SetMessage(_T("无法创建文件"));
+		if (pDlg) pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
+		return;
+	}
+
+	std::streamsize totalSize = 0;
+	std::streamsize received = 0;
+
+	while (true) {
+		int cmd = client.DealCommand();
+		if (cmd <= 0) {
+			pProgressDlg->SetMessage(_T("接收数据失败"));
+			break;
+		}
+		Cpacket& pkt = client.GetPacket();
+		if (pkt.sCmd == CMD::CMD_ERROR) {
+			std::string err(pkt.strData.begin(), pkt.strData.end());
+			CString werr(err.c_str());
+			pProgressDlg->SetMessage(werr);
+			break;
+		} else if (pkt.sCmd == CMD::CMD_EOF) {
+			break;
+		} else if (pkt.sCmd == CMD::CMD_DOWNLOAD_FILE) {
+			// 首包可能是文件大小
+			if (totalSize == 0 && pkt.strData.size() >= (size_t)sizeof(std::streamsize)) {
+				std::streamsize sz = 0;
+				memcpy(&sz, pkt.strData.data(), sizeof(sz));
+				totalSize = sz;
+				continue;
+			}
+			if (!pkt.strData.empty()) {
+				file.Write(pkt.strData.data(), (UINT)pkt.strData.size());
+				received += (std::streamsize)pkt.strData.size();
+				if (totalSize > 0) {
+					int prog = (int)((double)received / (double)totalSize * 100.0);
+					pProgressDlg->SetProgress(prog);
+				}
+			}
+		} else {
+			pProgressDlg->SetMessage(_T("接收到意外的包"));
+			break;
+		}
+	}
+
+	file.Close();
+	if (totalSize > 0 && received == totalSize) {
+		pProgressDlg->SetProgress(100);
+		pProgressDlg->SetMessage(_T("文件下载成功"));
+	}
+	if (pDlg) pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
 }

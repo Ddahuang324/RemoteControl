@@ -71,6 +71,12 @@
         "stop_token": "cpp",
         "thread": "cpp",
         "xtree": "cpp",
-        "array": "cpp"
+        "array": "cpp",
+        "codecvt": "cpp",
+        "deque": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp",
+        "future": "cpp",
+        "queue": "cpp"
     }
 }

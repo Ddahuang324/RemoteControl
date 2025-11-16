@@ -4,6 +4,25 @@
 
 #pragma once
 #include "clientSocket.h"
+#include "Enities.h"
+#include "include\\MultiThread\\ThreadPool.hpp"
+
+// 前向声明
+class CDownloadProgressDlg;
+
+// 定义自定义消息
+#define WM_UPDATE_PROGRESS (WM_USER + 1)
+#define WM_CLOSE_PROGRESS (WM_USER + 2)
+
+// 下载参数结构体
+struct DownloadParams {
+	CString requestPath;
+	CString savePath;
+	std::streamsize fileSize;
+	// 使用指向 CClientSocket 的方法通过单例访问
+	CDownloadProgressDlg* pProgressDlg;
+	class CRemoteControlClientDlg* pOwner;
+};
 
 // CRemoteControlClientDlg 对话框
 class CRemoteControlClientDlg : public CDialogEx
@@ -26,8 +45,23 @@ private:
 	bool SendCommandPacket(int nCommand, const BYTE* pData = NULL, size_t nSize = 0);
 
 
+
 protected:
 	HICON m_hIcon;
+
+// 网络客户端
+	CClientSocket& m_client = CClientSocket::GetInstance();
+
+	// UI 控件
+	CButton m_btnConnect; // IDC_BTN_TEST
+
+	// 状态
+	CString m_strCurrentDirPath;
+	CString m_strSelectedFile;
+	bool m_bConnected = false;
+
+	// 线程池
+	ThreadPool m_threadPool{4};
 
 	// 生成的消息映射函数
 	virtual BOOL OnInitDialog() override;
@@ -46,6 +80,12 @@ public:
 	CString GetItemPath(HTREEITEM hItem);
 	afx_msg void OnDblclkTree3(NMHDR* pNMHDR, LRESULT* pResult);
 	CListCtrl m_List;
+	afx_msg void OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnDownloadFile();
+	afx_msg void OnDeleteFile();
+	afx_msg void OnOpenFile();
+	afx_msg LRESULT OnUpdateProgress(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnCloseProgress(WPARAM wParam, LPARAM lParam);
 };
 
 typedef struct file_info {

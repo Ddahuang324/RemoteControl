@@ -1,0 +1,997 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index c9c56e8..5ac8e55 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -72,6 +72,11 @@
+         "mutex": "cpp",
+         "condition_variable": "cpp",
+         "array": "cpp",
+-        "codecvt": "cpp"
++        "codecvt": "cpp",
++        "deque": "cpp",
++        "coroutine": "cpp",
++        "resumable": "cpp",
++        "future": "cpp",
++        "queue": "cpp"
+     }
+ }
+\ No newline at end of file
+diff --git a/RemoteControl_Client/DownloadProgressDlg.cpp b/RemoteControl_Client/DownloadProgressDlg.cpp
+new file mode 100644
+index 0000000..0e441d8
+--- /dev/null
++++ b/RemoteControl_Client/DownloadProgressDlg.cpp
+@@ -0,0 +1,103 @@
++// DownloadProgressDlg.cpp: 实现文件
++//
++
++#include "pch.h"
++#include "framework.h"
++#include "RemoteControl_Client.h"
++#include "DownloadProgressDlg.h"
++#include "afxdialogex.h"
++
++#ifdef _DEBUG
++#define new DEBUG_NEW
++#endif
++
++
++// CDownloadProgressDlg 对话框
++
++IMPLEMENT_DYNAMIC(CDownloadProgressDlg, CDialogEx)
++
++CDownloadProgressDlg::CDownloadProgressDlg(CWnd* pParent /*=nullptr*/)
++	: CDialogEx(IDD_DOWNLOAD_PROGRESS_DIALOG, pParent)
++{
++	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
++}
++
++CDownloadProgressDlg::~CDownloadProgressDlg()
++{
++}
++
++void CDownloadProgressDlg::DoDataExchange(CDataExchange* pDX)
++{
++	CDialogEx::DoDataExchange(pDX);
++	DDX_Control(pDX, IDC_PROGRESS_DOWNLOAD, m_progress);
++}
++
++BEGIN_MESSAGE_MAP(CDownloadProgressDlg, CDialogEx)
++	ON_WM_PAINT()
++	ON_WM_QUERYDRAGICON()
++END_MESSAGE_MAP()
++
++
++// CDownloadProgressDlg 消息处理程序
++
++BOOL CDownloadProgressDlg::OnInitDialog()
++{
++	CDialogEx::OnInitDialog();
++
++	// 设置此对话框的图标。  当应用程序主窗口不是对话框时，框架将自动
++	//  执行此操作
++	SetIcon(m_hIcon, TRUE);			// 设置大图标
++	SetIcon(m_hIcon, FALSE);		// 设置小图标
++
++	// 初始化进度条
++	m_progress.SetRange(0, 100);
++	m_progress.SetPos(0);
++
++	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
++}
++
++// 如果向对话框添加最小化按钮，则需要下面的代码
++//  来绘制该图标。  对于使用文档/视图模型的 MFC 应用程序，
++//  这将由框架自动完成。
++
++void CDownloadProgressDlg::OnPaint()
++{
++	if (IsIconic())
++	{
++		CPaintDC dc(this); // 用于绘制的设备上下文
++
++		SendMessage(WM_ICONERASEBKGND, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
++
++		// 使图标在工作区矩形中居中
++		int cxIcon = GetSystemMetrics(SM_CXICON);
++		int cyIcon = GetSystemMetrics(SM_CYICON);
++		CRect rect;
++		GetClientRect(&rect);
++		int x = (rect.Width() - cxIcon + 1) / 2;
++		int y = (rect.Height() - cyIcon + 1) / 2;
++
++		// 绘制图标
++		dc.DrawIcon(x, y, m_hIcon);
++	}
++	else
++	{
++		CDialogEx::OnPaint();
++	}
++}
++
++//当用户拖动最小化窗口时系统调用此函数取得光标
++//显示。
++HCURSOR CDownloadProgressDlg::OnQueryDragIcon()
++{
++	return static_cast<HCURSOR>(m_hIcon);
++}
++
++void CDownloadProgressDlg::SetProgress(int progress)
++{
++	m_progress.SetPos(progress);
++}
++
++void CDownloadProgressDlg::SetMessage(const CString& msg)
++{
++	SetWindowText(msg);
++}
+\ No newline at end of file
+diff --git a/RemoteControl_Client/DownloadProgressDlg.h b/RemoteControl_Client/DownloadProgressDlg.h
+new file mode 100644
+index 0000000..522bb89
+--- /dev/null
++++ b/RemoteControl_Client/DownloadProgressDlg.h
+@@ -0,0 +1,37 @@
++// DownloadProgressDlg.h: 头文件
++//
++
++#pragma once
++
++// CDownloadProgressDlg 对话框
++
++class CDownloadProgressDlg : public CDialogEx
++{
++	DECLARE_DYNAMIC(CDownloadProgressDlg)
++
++public:
++	CDownloadProgressDlg(CWnd* pParent = nullptr);   // 标准构造函数
++	virtual ~CDownloadProgressDlg();
++
++// 对话框数据
++#ifdef AFX_DESIGN_TIME
++	enum { IDD = IDD_DOWNLOAD_PROGRESS_DIALOG };
++#endif
++
++protected:
++	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持
++
++// 实现
++protected:
++	HICON m_hIcon;
++	CProgressCtrl m_progress;
++
++	// 生成的消息映射函数
++	virtual BOOL OnInitDialog();
++	afx_msg void OnPaint();
++	afx_msg HCURSOR OnQueryDragIcon();
++	DECLARE_MESSAGE_MAP()
++public:
++	void SetProgress(int progress);
++	void SetMessage(const CString& msg);
++};
+\ No newline at end of file
+diff --git a/RemoteControl_Client/Enities.h b/RemoteControl_Client/Enities.h
+index 4b78f28..4073f88 100644
+--- a/RemoteControl_Client/Enities.h
++++ b/RemoteControl_Client/Enities.h
+@@ -17,6 +17,7 @@ enum CMD : unsigned short {
+ 	CMD_SCREEN_DIFF = 8,
+ 	CMD_LOCK_MACHINE = 9,
+ 	CMD_UNLOCK_MACHINE = 10,
++	CMD_DELETE_FILE = 11,
+ 	CMD_TEST_CONNECT = 2022,
+ 	CMD_ERROR = 999
+ };
+diff --git a/RemoteControl_Client/RemoteControlClient.rc b/RemoteControl_Client/RemoteControlClient.rc
+index 8713f26..56dbc48 100644
+Binary files a/RemoteControl_Client/RemoteControlClient.rc and b/RemoteControl_Client/RemoteControlClient.rc differ
+diff --git a/RemoteControl_Client/RemoteControl_Client.vcxproj b/RemoteControl_Client/RemoteControl_Client.vcxproj
+index ab20c30..feb1908 100644
+--- a/RemoteControl_Client/RemoteControl_Client.vcxproj
++++ b/RemoteControl_Client/RemoteControl_Client.vcxproj
+@@ -197,6 +197,8 @@
+     <ClInclude Include="Resource.h" />
+     <ClInclude Include="targetver.h" />
+     <ClInclude Include="Enities.h" />
++    <ClInclude Include="include\MultiThread\ThreadPool.hpp" />
++    <ClInclude Include="DownloadProgressDlg.h" />
+   </ItemGroup>
+   <ItemGroup>
+     <ClCompile Include="clientSocket.cpp" />
+@@ -208,6 +210,7 @@
+     </ClCompile>
+     <ClCompile Include="RemoteControl_Client.cpp" />
+     <ClCompile Include="RemoteControl_ClientDlg.cpp" />
++    <ClCompile Include="DownloadProgressDlg.cpp" />
+   </ItemGroup>
+   <ItemGroup>
+     <ResourceCompile Include="RemoteControlClient.rc" />
+diff --git a/RemoteControl_Client/RemoteControl_ClientDlg.cpp b/RemoteControl_Client/RemoteControl_ClientDlg.cpp
+index c12c3c7..8708713 100644
+--- a/RemoteControl_Client/RemoteControl_ClientDlg.cpp
++++ b/RemoteControl_Client/RemoteControl_ClientDlg.cpp
+@@ -6,7 +6,9 @@
+ #include "framework.h"
+ #include "RemoteControl_Client.h"
+ #include "RemoteControl_ClientDlg.h"
++#include "resource.h"
+ #include "afxdialogex.h"
++#include "DownloadProgressDlg.h"
+ #include <sstream>      // 【新增】
+ #include <algorithm>    // 【新增】
+ #include <cctype>       // 【新增】
+@@ -18,6 +20,55 @@
+ #define new DEBUG_NEW
+ #endif
+ 
++// 下载任务函数
++void DownloadFileTask(DownloadParams params) {
++    CRemoteControlClientDlg* pDlg = params.pDlg;
++    CclientSocket* pSocket = params.pSocket;
++    CDownloadProgressDlg* pProgressDlg = params.pProgressDlg;
++    CFile file;
++    if (!file.Open(CString(params.savePath.c_str()), CFile::modeCreate | CFile::modeWrite)) {
++        pProgressDlg->SetMessage(_T("无法创建文件"));
++        pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
++        return;
++    }
++    std::streamsize totalSize = params.fileSize;
++    std::streamsize received = 0;
++    size_t updateInterval = (totalSize <= 10LL * 1024 * 1024) ? 1024 * 1024 : 1024 * 10; // 小文件每1MB更新，中大每10KB
++    while (true) {
++        std::optional<Cpacket> recvPacket = pSocket->RecvPacket();
++        if (!recvPacket) {
++            pProgressDlg->SetMessage(_T("接收数据失败"));
++            pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
++            break;
++        }
++        if (recvPacket->sCmd == CMD::CMD_ERROR) {
++            std::string errMsg(recvPacket->data.begin(), recvPacket->data.end());
++            pProgressDlg->SetMessage(CString(("错误: " + errMsg).c_str()));
++            pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
++            break;
++        } else if (recvPacket->sCmd == CMD::CMD_EOF) {
++            break;
++        } else if (recvPacket->sCmd == CMD::CMD_DOWNLOAD_FILE) {
++            file.Write(recvPacket->data.data(), recvPacket->data.size());
++            received += recvPacket->data.size();
++            if ((size_t)received % updateInterval == 0 || received == totalSize) {
++                int progress = (int)((double)received / totalSize * 100);
++                pProgressDlg->SetProgress(progress);
++            }
++        } else {
++            pProgressDlg->SetMessage(_T("接收到意外的包"));
++            pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
++            break;
++        }
++    }
++    file.Close();
++    if (received == totalSize) {
++        pProgressDlg->SetProgress(100);
++        pProgressDlg->SetMessage(_T("文件下载成功"));
++        pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
++    }
++}
++
+ 
+ // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
+ 
+@@ -57,7 +108,7 @@ END_MESSAGE_MAP()
+ 
+ 
+ CRemoteControlClientDlg::CRemoteControlClientDlg(CWnd* pParent /*=nullptr*/)
+-	: CDialogEx(IDD_REMOTECONTROL_CLIENT_DIALOG, pParent)
++	: CDialogEx(IDD_REMOTECONTROL_CLIENT_DIALOG, pParent), m_threadPool(4)
+ {
+ 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+ }
+@@ -73,6 +124,7 @@ void CRemoteControlClientDlg::DoDataExchange(CDataExchange* pDX)
+ 	DDX_Control(pDX, IDC_IPADDRESS_Serv, m_ipAddressServ);
+ 	DDX_Control(pDX, IDC_EDIT1, m_editPort);
+ 	DDX_Control(pDX, IDC_BUTTON2, m_btnViewFileInfo);
++	DDX_Control(pDX, IDC_BTN_TEST, m_btnConnect);
+ }
+ 
+ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
+@@ -87,6 +139,12 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
+ 	ON_NOTIFY(IPN_FIELDCHANGED, IDC_IPADDRESS_Serv, &CRemoteControlClientDlg::OnIpnFieldchangedIpaddressServ)
+ 	// 端口编辑框文本变化通知
+ 	ON_EN_CHANGE(IDC_EDIT1, &CRemoteControlClientDlg::OnEnChangeEdit1)
++	ON_NOTIFY(NM_RCLICK, IDC_LIST4, &CRemoteControlClientDlg::OnNMRClickList4)
++	ON_COMMAND(ID_DOWNLOAD_FILE, &CRemoteControlClientDlg::OnDownloadFile)
++	ON_COMMAND(ID_DELETE_FILE, &CRemoteControlClientDlg::OnDeleteFile)
++	ON_COMMAND(ID_OPEN_FILE, &CRemoteControlClientDlg::OnOpenFile)
++	ON_MESSAGE(WM_UPDATE_PROGRESS, &CRemoteControlClientDlg::OnUpdateProgress)
++	ON_MESSAGE(WM_CLOSE_PROGRESS, &CRemoteControlClientDlg::OnCloseProgress)
+ END_MESSAGE_MAP()
+ 
+ 
+@@ -130,6 +188,9 @@ BOOL CRemoteControlClientDlg::OnInitDialog()
+ 	m_List.ModifyStyle(0, LVS_REPORT);
+ 	m_List.SetExtendedStyle(m_List.GetExtendedStyle() | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+ 
++	// 初始化连接按钮文本
++	m_btnConnect.SetWindowText(_T("连接"));
++
+ 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
+ }
+ 
+@@ -187,39 +248,51 @@ HCURSOR CRemoteControlClientDlg::OnQueryDragIcon()
+ // 职责：建立长连接，而不是测试。
+ void CRemoteControlClientDlg::OnBnClickedBtnTest()
+ {
+-	UpdateData(TRUE); // UI -> 成员
+-
+-	DWORD hostIP = m_Serv_Address;
+-	BYTE* pIP = reinterpret_cast<BYTE*>(&hostIP);
+-	char ipBuf[16] = {0};
+-	// 【注意】diff 的 IP 转换是反的 ，P[3] 是第一位
+-	sprintf_s(ipBuf, sizeof(ipBuf), "%u.%u.%u.%u", pIP[3], pIP[2], pIP[1], pIP[0]);
+-	std::string serverIP(ipBuf);
+-
+-	int port = _ttoi(m_Port);
+-	if (port == 0) port = 12345;
+-
+-	// 使用成员变量 m_clientSocket 建立连接
+-	if(m_clientSocket.connectToServer(serverIP, (unsigned short)port)){
+-		MessageBox(L"连接成功！");
+-
+-		// 发送一个测试包，验证连接
+-		std::vector<BYTE> data;
+-		Cpacket packet(CMD::CMD_TEST_CONNECT, data); // 使用现代版的 CMD::CMD_TEST_CONNECT
+-		if(!m_clientSocket.SendPacket(packet)){
+-			MessageBox(L"发送测试包失败！");
+-			m_clientSocket.CloseSocket();
+-			return;
+-		}
+-		std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+-		if(!recvPacket || recvPacket->sCmd != CMD::CMD_TEST_CONNECT){
+-			MessageBox(L"测试包响应失败！");
+-			m_clientSocket.CloseSocket();
++	if (!m_bConnected) {
++		// 连接逻辑
++		UpdateData(TRUE); // UI -> 成员
++
++		DWORD hostIP = m_Serv_Address;
++		BYTE* pIP = reinterpret_cast<BYTE*>(&hostIP);
++		char ipBuf[16] = {0};
++		// 【注意】diff 的 IP 转换是反的 ，P[3] 是第一位
++		sprintf_s(ipBuf, sizeof(ipBuf), "%u.%u.%u.%u", pIP[3], pIP[2], pIP[1], pIP[0]);
++		std::string serverIP(ipBuf);
++
++		int port = _ttoi(m_Port);
++		if (port == 0) port = 12345;
++
++		// 使用成员变量 m_clientSocket 建立连接
++		if (m_clientSocket.connectToServer(serverIP, (unsigned short)port)) {
++			MessageBox(L"连接成功！");
++
++			// 发送一个测试包，验证连接
++			std::vector<BYTE> data;
++			Cpacket packet(CMD::CMD_TEST_CONNECT, data); // 使用现代版的 CMD::CMD_TEST_CONNECT
++			if (!m_clientSocket.SendPacket(packet)) {
++				MessageBox(L"发送测试包失败！");
++				m_clientSocket.CloseSocket();
++				return;
++			}
++			std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
++			if (!recvPacket || recvPacket->sCmd != CMD::CMD_TEST_CONNECT) {
++				MessageBox(L"测试包响应失败！");
++				m_clientSocket.CloseSocket();
++				return;
++			} else {
++				MessageBox(L"服务器响应成功！连接已保持。");
++				m_bConnected = true;
++				m_btnConnect.SetWindowText(_T("断开连接"));
++			}
+ 		} else {
+-			MessageBox(L"服务器响应成功！连接已保持。");
++			MessageBox(L"连接失败！");
+ 		}
+ 	} else {
+-		MessageBox(L"连接失败！");
++		// 断开连接逻辑
++		m_clientSocket.CloseSocket();
++		m_bConnected = false;
++		m_btnConnect.SetWindowText(_T("连接"));
++		MessageBox(L"连接已断开！");
+ 	}
+ }
+ 
+@@ -356,6 +429,13 @@ void CRemoteControlClientDlg::OnDblclkTree3(NMHDR* pNMHDR, LRESULT* pResult)
+ 
+ 	// 1. 获取路径并发包
+ 	CString path = GetItemPath(hItem);
++	// 当双击 'Drives' 根节点或空路径时，不应向服务器发送目录请求。
++	// 允许用户多次点击 Drives 来刷新驱动器信息（重新向服务器请求并更新树）。
++	if (path.IsEmpty() || path == _T("Drives")) {
++		// 触发刷新驱动器列表（等同于点击 '查看文件信息' 按钮）
++		OnBnClickedButton2();
++		return;
++	}
+ 	std::string strPath = CT2A(path);
+ 	std::vector<BYTE> pathData(strPath.begin(), strPath.end());
+ 
+@@ -421,6 +501,8 @@ void CRemoteControlClientDlg::OnTvnSelchangedTree3(NMHDR* pNMHDR, LRESULT* pResu
+ 		return;
+ 	}
+ 
++	m_strCurrentDirPath = path;
++
+ 	// 1. 发送请求
+ 	std::string strPath = CT2A(path);
+ 	std::vector<BYTE> pathData(strPath.begin(), strPath.end());
+@@ -525,3 +607,155 @@ void CRemoteControlClientDlg::OnTvnSelchangedTree3(NMHDR* pNMHDR, LRESULT* pResu
+ 		m_List.SetColumnWidth(c, colMax[c] + padding);
+ 	}
+ }
++
++void CRemoteControlClientDlg::OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult)
++{
++	LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
++	*pResult = 0;
++
++	// 获取鼠标位置
++	CPoint point;
++	GetCursorPos(&point);
++	m_List.ScreenToClient(&point);
++
++	// 使用 HitTest 确定点击的项
++	UINT flags;
++	int nItem = m_List.HitTest(point, &flags);
++
++	if (nItem != -1 && (flags & LVHT_ONITEM)) {
++		// 选中该项
++		m_List.SetItemState(nItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
++
++		// 获取文件名（假设在第一列）
++		CString fileName = m_List.GetItemText(nItem, 0);
++		m_strSelectedFile = fileName;
++
++		// 创建弹出菜单
++		CMenu menu;
++		menu.CreatePopupMenu();
++		menu.AppendMenu(MF_STRING, ID_DOWNLOAD_FILE, _T("下载文件"));
++		menu.AppendMenu(MF_STRING, ID_DELETE_FILE, _T("删除文件"));
++		menu.AppendMenu(MF_STRING, ID_OPEN_FILE, _T("打开文件"));
++
++		// 显示菜单
++		CPoint screenPoint;
++		GetCursorPos(&screenPoint);
++		menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, screenPoint.x, screenPoint.y, this);
++	}
++}
++
++void CRemoteControlClientDlg::OnDownloadFile()
++{
++	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
++		MessageBox(_T("未选择文件"));
++		return;
++	}
++
++	// 打开文件保存对话框，让用户选择下载位置
++	CFileDialog dlg(FALSE, NULL, m_strSelectedFile, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, _T("All Files (*.*)|*.*||"), this);
++	if (dlg.DoModal() != IDOK) {
++		return; // 用户取消
++	}
++
++	CString savePath = dlg.GetPathName();
++
++	// 发送下载请求
++	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
++	std::string strPath = CT2A(fullPath);
++	std::vector<BYTE> pathData(strPath.begin(), strPath.end());
++
++	Cpacket packet(CMD::CMD_DOWNLOAD_FILE, pathData);
++	if (!m_clientSocket.SendPacket(packet)) {
++		MessageBox(_T("发送下载请求失败"));
++		return;
++	}
++
++	// 接收文件大小
++	std::optional<Cpacket> sizePacket = m_clientSocket.RecvPacket();
++	if (!sizePacket || sizePacket->sCmd != CMD::CMD_DOWNLOAD_FILE) {
++		MessageBox(_T("接收文件大小失败"));
++		return;
++	}
++
++	std::streamsize fileSize;
++	if (sizePacket->data.size() < sizeof(std::streamsize)) {
++		MessageBox(_T("文件大小数据错误"));
++		return;
++	}
++	memcpy(&fileSize, sizePacket->data.data(), sizeof(std::streamsize));
++
++	// 创建进度对话框
++	CDownloadProgressDlg* pProgressDlg = new CDownloadProgressDlg(this);
++	pProgressDlg->Create(IDD_DOWNLOAD_PROGRESS_DIALOG, this);
++	pProgressDlg->ShowWindow(SW_SHOW);
++
++	// 启动下载线程
++	DownloadParams params = {this, CT2A(fullPath), CT2A(savePath), fileSize, &m_clientSocket, pProgressDlg};
++	m_threadPool.enqueue(DownloadFileTask, params);
++}
++
++void CRemoteControlClientDlg::OnDeleteFile()
++{
++	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
++		MessageBox(_T("未选择文件"));
++		return;
++	}
++
++	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
++	std::string strPath = CT2A(fullPath);
++	std::vector<BYTE> pathData(strPath.begin(), strPath.end());
++
++	Cpacket packet(CMD::CMD_DELETE_FILE, pathData);
++	if (!m_clientSocket.SendPacket(packet)) {
++		MessageBox(_T("发送删除请求失败"));
++		return;
++	}
++
++	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
++	if (recvPacket && recvPacket->sCmd == CMD::CMD_DELETE_FILE) {
++		MessageBox(_T("文件删除成功"));
++		// 刷新列表
++		OnTvnSelchangedTree3(nullptr, nullptr); // 简单刷新
++	} else {
++		MessageBox(_T("删除文件失败"));
++	}
++}
++
++void CRemoteControlClientDlg::OnOpenFile()
++{
++	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
++		MessageBox(_T("未选择文件"));
++		return;
++	}
++
++	CString fullPath = m_strCurrentDirPath + _T("\\") + m_strSelectedFile;
++	std::string strPath = CT2A(fullPath);
++	std::vector<BYTE> pathData(strPath.begin(), strPath.end());
++
++	Cpacket packet(CMD::CMD_RUN_FILE, pathData);
++	if (!m_clientSocket.SendPacket(packet)) {
++		MessageBox(_T("发送打开请求失败"));
++		return;
++	}
++
++	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
++	if (recvPacket && recvPacket->sCmd == CMD::CMD_RUN_FILE) {
++		MessageBox(_T("文件打开成功"));
++	} else {
++		MessageBox(_T("打开文件失败"));
++	}
++}
++
++LRESULT CRemoteControlClientDlg::OnUpdateProgress(WPARAM wParam, LPARAM lParam)
++{
++    // 不再需要，因为直接更新进度对话框
++    return 0;
++}
++
++LRESULT CRemoteControlClientDlg::OnCloseProgress(WPARAM wParam, LPARAM lParam)
++{
++    CDownloadProgressDlg* pDlg = (CDownloadProgressDlg*)lParam;
++    pDlg->DestroyWindow();
++    delete pDlg;
++    return 0;
++}
+diff --git a/RemoteControl_Client/RemoteControl_ClientDlg.h b/RemoteControl_Client/RemoteControl_ClientDlg.h
+index bc4101f..6d2327d 100644
+--- a/RemoteControl_Client/RemoteControl_ClientDlg.h
++++ b/RemoteControl_Client/RemoteControl_ClientDlg.h
+@@ -8,6 +8,25 @@
+ #include <vector>
+ #include <optional>
+ #include "Enities.h"
++#include "include\MultiThread\ThreadPool.hpp"
++
++// 前向声明
++class CRemoteControlClientDlg;
++class CDownloadProgressDlg;
++
++// 定义自定义消息
++#define WM_UPDATE_PROGRESS (WM_USER + 1)
++#define WM_CLOSE_PROGRESS (WM_USER + 2)
++
++// 下载参数结构体
++struct DownloadParams {
++    CRemoteControlClientDlg* pDlg;
++    std::string filePath;
++    std::string savePath;
++    std::streamsize fileSize;
++    CclientSocket* pSocket;
++    CDownloadProgressDlg* pProgressDlg;
++};
+ 
+ // CRemoteControlClientDlg 对话框
+ 
+@@ -31,6 +50,8 @@ protected:
+ // 实现
+ protected:
+ 	HICON m_hIcon;
++
++// public:
+ 	CclientSocket m_clientSocket;
+ 
+ 		// 新 UI 控件声明（用于补全代码）
+@@ -45,10 +66,18 @@ protected:
+ 		CEdit m_editPort;                 // 端口输入框 IDC_EDIT1
+ 		CIPAddressCtrl m_ipAddressServ;   // IP 地址控件 IDC_IPADDRESS_Serv
+ 		CButton m_btnViewFileInfo;        // 查看文件信息按钮 IDC_BUTTON2
++		CButton m_btnConnect;             // 连接按钮 IDC_BTN_TEST
+ 
+ 		CString m_strServerIP = L"127.0.0.1"; // 当前服务器IP
+ 		int m_nServerPort = 9527; // 当前服务器端口，默认9527
+ 
++		CString m_strCurrentDirPath; // 当前目录路径
++		CString m_strSelectedFile; // 选中的文件
++
++		bool m_bConnected = false; // 连接状态
++
++		ThreadPool m_threadPool; // 线程池
++
+ 		// 生成的消息映射函数
+ 		virtual BOOL OnInitDialog()override;
+ 		afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
+@@ -62,5 +91,11 @@ protected:
+ 		afx_msg void OnLvnItemchangedList4(NMHDR* pNMHDR, LRESULT* pResult);
+ 		afx_msg void OnIpnFieldchangedIpaddressServ(NMHDR* pNMHDR, LRESULT* pResult);
+ 		afx_msg void OnEnChangeEdit1();
++		afx_msg void OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult);
++		afx_msg void OnDownloadFile();
++		afx_msg void OnDeleteFile();
++		afx_msg void OnOpenFile();
++		afx_msg LRESULT OnUpdateProgress(WPARAM wParam, LPARAM lParam);
++		afx_msg LRESULT OnCloseProgress(WPARAM wParam, LPARAM lParam);
+ 		DECLARE_MESSAGE_MAP()
+ };
+diff --git a/RemoteControl_Client/Resource.h b/RemoteControl_Client/Resource.h
+index f16a734..f5b9217 100644
+--- a/RemoteControl_Client/Resource.h
++++ b/RemoteControl_Client/Resource.h
+@@ -14,6 +14,11 @@
+ #define IDC_TREE3                       1004
+ #define IDC_LIST4                       1005
+ #define IDC_BUTTON2                     1006
++#define IDC_PROGRESS_DOWNLOAD           1007
++#define IDD_DOWNLOAD_PROGRESS_DIALOG    103
++#define ID_DOWNLOAD_FILE                32771
++#define ID_DELETE_FILE                  32772
++#define ID_OPEN_FILE                    32773
+ 
+ // Next default values for new objects
+ // 
+@@ -21,7 +26,7 @@
+ #ifndef APSTUDIO_READONLY_SYMBOLS
+ #define _APS_NEXT_RESOURCE_VALUE        130
+ #define _APS_NEXT_COMMAND_VALUE         32771
+-#define _APS_NEXT_CONTROL_VALUE         1001
++#define _APS_NEXT_CONTROL_VALUE         1007
+ #define _APS_NEXT_SYMED_VALUE           101
+ #endif
+ #endif
+diff --git a/RemoteControl_Client/include/MultiThread/ThreadPool.hpp b/RemoteControl_Client/include/MultiThread/ThreadPool.hpp
+new file mode 100644
+index 0000000..228b1e6
+--- /dev/null
++++ b/RemoteControl_Client/include/MultiThread/ThreadPool.hpp
+@@ -0,0 +1,71 @@
++#pragma once
++
++#include <cstddef>
++#include <vector>
++#include <queue>
++#include <memory>
++#include <thread>
++#include <mutex>
++#include <condition_variable>
++#include <future>
++#include <functional>
++#include <stdexcept>
++#include <type_traits>
++
++class ThreadPool {
++public:
++    // 构造函数 — 内联实现，避免外部定义导致的解析问题
++    ThreadPool(size_t threads) : stop(false) {
++        for (size_t i = 0; i < threads; ++i) {
++            workers.emplace_back([this] {
++                for (;;) {
++                    std::function<void()> task;
++                    {
++                        std::unique_lock<std::mutex> lock(this->queue_mutex);
++                        this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
++                        if (this->stop && this->tasks.empty()) return;
++                        task = std::move(this->tasks.front());
++                        this->tasks.pop();
++                    }
++                    task();
++                }
++            });
++        }
++    }
++
++    // 任务入队函数模板
++    template<class F, class... Args>
++    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
++        using return_type = typename std::invoke_result<F, Args...>::type;
++
++        auto task = std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
++        std::future<return_type> res = task->get_future();
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            if (stop)
++                throw std::runtime_error("enqueue on stopped ThreadPool");
++            tasks.emplace([task]() { (*task)(); });
++        }
++        condition.notify_one();
++        return res;
++    }
++
++    // 析构函数 — 内联实现
++    ~ThreadPool() {
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            stop = true;
++        }
++        condition.notify_all();
++        for (std::thread& worker : workers) if (worker.joinable()) worker.join();
++    }
++private:
++    //线程容器
++    std::vector< std::thread > workers;
++    //任务队列
++    std::queue< std::function<void()> > tasks;
++    //线程同步相关成员
++    std::mutex queue_mutex;
++    std::condition_variable condition;
++    bool stop;
++};
+diff --git a/RemoteControl_Client/itemsforDElete.txt b/RemoteControl_Client/itemsforDElete.txt
+new file mode 100644
+index 0000000..1b1cb4d
+Binary files /dev/null and b/RemoteControl_Client/itemsforDElete.txt differ
+diff --git a/RemoteControl_Server/RemoteControl_Server.vcxproj b/RemoteControl_Server/RemoteControl_Server.vcxproj
+index 0d6ca1b..c1a90dc 100644
+--- a/RemoteControl_Server/RemoteControl_Server.vcxproj
++++ b/RemoteControl_Server/RemoteControl_Server.vcxproj
+@@ -163,6 +163,7 @@
+     <ClInclude Include="include\Resource.h" />
+     <ClInclude Include="include\network\ServerSocket.h" />
+     <ClInclude Include="include\utils\RemoteControl_server.h" />
++    <ClInclude Include="include\utils\ThreadPool.hpp" />
+     <ClInclude Include="include\core\Enities.h" />
+     <ClInclude Include="include\core\fileSystem.h" />
+     <ClInclude Include="include\core\InputeSimulator.h" />
+diff --git a/RemoteControl_Server/RemoteControl_Server.vcxproj.filters b/RemoteControl_Server/RemoteControl_Server.vcxproj.filters
+index de4f3f9..f070576 100644
+--- a/RemoteControl_Server/RemoteControl_Server.vcxproj.filters
++++ b/RemoteControl_Server/RemoteControl_Server.vcxproj.filters
+@@ -49,6 +49,9 @@
+     <ClInclude Include="include\utils\RemoteControl_server.h">
+       <Filter>include\utils</Filter>
+     </ClInclude>
++    <ClInclude Include="include\utils\ThreadPool.hpp">
++      <Filter>include\utils</Filter>
++    </ClInclude>
+     <ClInclude Include="include\Resource.h">
+       <Filter>include</Filter>
+     </ClInclude>
+diff --git a/RemoteControl_Server/include/core/Enities.h b/RemoteControl_Server/include/core/Enities.h
+index 5c634e0..4a15fc9 100644
+--- a/RemoteControl_Server/include/core/Enities.h
++++ b/RemoteControl_Server/include/core/Enities.h
+@@ -18,6 +18,7 @@ enum CMD : unsigned short {
+ 	CMD_SCREEN_DIFF = 8,
+ 	CMD_LOCK_MACHINE = 9,
+ 	CMD_UNLOCK_MACHINE = 10,
++	CMD_DELETE_FILE = 11,
+ 	CMD_TEST_CONNECT = 2022,
+ 	CMD_ERROR = 999
+ };
+diff --git a/RemoteControl_Server/include/core/fileSystem.h b/RemoteControl_Server/include/core/fileSystem.h
+index bcdff59..4df69ca 100644
+--- a/RemoteControl_Server/include/core/fileSystem.h
++++ b/RemoteControl_Server/include/core/fileSystem.h
+@@ -128,5 +128,26 @@ int DownloadFile(const std::string& path, CServerSocket& ClientSocket) {
+ 	return 0;
+ }
+ 
++int DeleteFile(const std::string& path, CServerSocket& ClientSocket) {
++    try {
++        if (std::filesystem::remove(path)) {
++            // 成功删除，发送确认包
++            std::vector<BYTE> pathData(path.begin(), path.end());
++            Cpacket packet(CMD::CMD_DELETE_FILE, pathData);
++            ClientSocket.SendPacket(packet);
++            return 0;
++        } else {
++            // 删除失败
++            std::string errMsg = "Failed to delete file: " + path;
++            ClientSocket.SendErrorPacket(errMsg);
++            return -1;
++        }
++    } catch (const std::filesystem::filesystem_error& e) {
++        std::string errMsg = "Filesystem error: " + std::string(e.what());
++        ClientSocket.SendErrorPacket(errMsg);
++        return -1;
++    }
++}
++
+ 
+ 
+diff --git a/RemoteControl_Server/include/network/ServerSocket.h b/RemoteControl_Server/include/network/ServerSocket.h
+index 31badbe..4be914d 100644
+--- a/RemoteControl_Server/include/network/ServerSocket.h
++++ b/RemoteControl_Server/include/network/ServerSocket.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "../pch/framework.h"
+ #include "Enities.h"
++#include "../utils/ThreadPool.hpp"
+ #include <numeric>
+ #include <optional>
+ #include <string>
+@@ -9,6 +10,8 @@
+ #include <winsock2.h>
+ #include <iostream>
+ #include <iomanip>
++#include <memory>
++#include <mutex>
+ 
+ using BYTE = unsigned char;
+ using WORD = unsigned short;
+@@ -136,7 +139,7 @@ public:
+ 
+ class CServerSocket {
+ public:
+-	explicit CServerSocket(unsigned short port) {
++	explicit CServerSocket(unsigned short port) : m_threadPool(std::make_unique<ThreadPool>(4)) {
+ 		m_servSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+ 		if (m_servSocket == INVALID_SOCKET) {
+ 			MessageBoxW(NULL, L"Socket creation failed", L"Error", MB_OK);
+@@ -171,6 +174,7 @@ public:
+ 	}
+ 	
+ 	virtual void SendPacket(const Cpacket& packet) {
++		std::lock_guard<std::mutex> lock(m_sendMutex);
+ 		auto buffer = packet.SerializePacket();
+ 		send(m_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
+ 	}
+@@ -231,6 +235,8 @@ private:
+ 	std::vector<BYTE> m_recvBuffer;
+ 	static constexpr size_t BUFFER_SIZE = 4096;
+ 	WSAInitializer m_wsaInit; 
++	std::unique_ptr<ThreadPool> m_threadPool;
++	std::mutex m_sendMutex;
+ 
+ 	
+ 	void HandleClient(const std::function<void(const Cpacket&)>& packetHAndler) {
+@@ -239,7 +245,9 @@ private:
+ 			if (!packetOpt) {
+ 				break; // 连接关闭或错误
+ 			}
+-			packetHAndler(*packetOpt);
++			m_threadPool->enqueue([packetHAndler, packet = *packetOpt]() {
++				packetHAndler(packet);
++			});
+ 		}
+ 	}
+ };
+diff --git a/RemoteControl_Server/include/utils/ThreadPool.hpp b/RemoteControl_Server/include/utils/ThreadPool.hpp
+new file mode 100644
+index 0000000..228b1e6
+--- /dev/null
++++ b/RemoteControl_Server/include/utils/ThreadPool.hpp
+@@ -0,0 +1,71 @@
++#pragma once
++
++#include <cstddef>
++#include <vector>
++#include <queue>
++#include <memory>
++#include <thread>
++#include <mutex>
++#include <condition_variable>
++#include <future>
++#include <functional>
++#include <stdexcept>
++#include <type_traits>
++
++class ThreadPool {
++public:
++    // 构造函数 — 内联实现，避免外部定义导致的解析问题
++    ThreadPool(size_t threads) : stop(false) {
++        for (size_t i = 0; i < threads; ++i) {
++            workers.emplace_back([this] {
++                for (;;) {
++                    std::function<void()> task;
++                    {
++                        std::unique_lock<std::mutex> lock(this->queue_mutex);
++                        this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
++                        if (this->stop && this->tasks.empty()) return;
++                        task = std::move(this->tasks.front());
++                        this->tasks.pop();
++                    }
++                    task();
++                }
++            });
++        }
++    }
++
++    // 任务入队函数模板
++    template<class F, class... Args>
++    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type> {
++        using return_type = typename std::invoke_result<F, Args...>::type;
++
++        auto task = std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
++        std::future<return_type> res = task->get_future();
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            if (stop)
++                throw std::runtime_error("enqueue on stopped ThreadPool");
++            tasks.emplace([task]() { (*task)(); });
++        }
++        condition.notify_one();
++        return res;
++    }
++
++    // 析构函数 — 内联实现
++    ~ThreadPool() {
++        {
++            std::unique_lock<std::mutex> lock(queue_mutex);
++            stop = true;
++        }
++        condition.notify_all();
++        for (std::thread& worker : workers) if (worker.joinable()) worker.join();
++    }
++private:
++    //线程容器
++    std::vector< std::thread > workers;
++    //任务队列
++    std::queue< std::function<void()> > tasks;
++    //线程同步相关成员
++    std::mutex queue_mutex;
++    std::condition_variable condition;
++    bool stop;
++};
+diff --git a/RemoteControl_Server/src/RemoteControl_server.cpp b/RemoteControl_Server/src/RemoteControl_server.cpp
+index edc539c..32c4f2a 100644
+--- a/RemoteControl_Server/src/RemoteControl_server.cpp
++++ b/RemoteControl_Server/src/RemoteControl_server.cpp
+@@ -89,6 +89,13 @@ int main()
+                           }
+                           break;
+                       }
++                      case CMD::CMD_DELETE_FILE: {
++                          if (!packet.data.empty()) {
++                              std::string path(packet.data.begin(), packet.data.end());
++                              DeleteFile(path, serverSocket);
++                          }
++                          break;
++                      }
+                       case CMD::CMD_MOUSE_EVENT: {
+                           HandleMouseEvent(serverSocket, packet);
+                           break;
+@@ -97,16 +104,16 @@ int main()
+                           CaptureScreen(serverSocket, packet);
+                           break;
+                       }
+-                      case CMD::CMD_LOCK_MACHINE: {
++                        case CMD::CMD_LOCK_MACHINE: {
+                             
+                             LockMachine(serverSocket, packet);
+                             break;
+                       }
+-                      case CMD::CMD_UNLOCK_MACHINE: {
++                        case CMD::CMD_UNLOCK_MACHINE: {
+                             UnlockMachine(serverSocket, packet);
+                             break;
+                       }
+-                       case CMD::CMD_TEST_CONNECT: {
++                        case CMD::CMD_TEST_CONNECT: {
+                           std::wcout << L"Test Connect (2002) received. Sending ACK." << std::endl;
+                           // 简单地回送一个相同命令字的包作为确认
+                           Cpacket response(CMD::CMD_TEST_CONNECT, {});

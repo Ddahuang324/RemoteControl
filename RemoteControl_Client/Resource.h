@@ -15,6 +15,11 @@
 #define IDC_BUTTON2                     1006
 #define IDC_TREE3                       1009
 #define IDC_LIST4                       1010
+#define IDC_PROGRESS_DOWNLOAD           1007
+#define IDD_DOWNLOAD_PROGRESS_DIALOG    103
+#define ID_DOWNLOAD_FILE                32771
+#define ID_DELETE_FILE                  32772
+#define ID_OPEN_FILE                    32773
 
 // Next default values for new objects
 // 

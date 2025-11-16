@@ -5,9 +5,11 @@
 #include "framework.h"
 #include "RemoteControl_server.h"
 #include "ServerSocket.h"
+#include "../RemoteControl_Server/include/core/Enities.h"
 #include "direct.h"
 #include "io.h"
 #include <list>
+#include <vector>
 #include <atlimage.h>
 
 
@@ -135,37 +137,73 @@ int RunFile() {
     return 0;
 }
 
+int DeleteFile() {
+    std::string path;
+    if (!CServerSocket::GetInstance().GetFilePath(path)) {
+        OutputDebugString(_T("DeleteFile: 获取路径失败"));
+        Cpacket err(CMD::CMD_ERROR, NULL, 0);
+        CServerSocket::GetInstance().Send(err);
+        return -1;
+    }
+
+    // 尝试删除文件
+    int ret = remove(path.c_str());
+    if (ret == 0) {
+        // 发送删除成功回执（命令号 11）
+        Cpacket ok(CMD::CMD_DELETE_FILE, NULL, 0);
+        CServerSocket::GetInstance().Send(ok);
+        return 0;
+    } else {
+        // 删除失败，发送错误回执并记录原因
+        CStringA msgA;
+        msgA.Format("DeleteFile failed, errno=%d", errno);
+        OutputDebugStringA(msgA);
+        Cpacket err(CMD::CMD_ERROR, (BYTE*)msgA.GetString(), (int)strlen(msgA.GetString()));
+        CServerSocket::GetInstance().Send(err);
+        return -2;
+    }
+}
+
 int DownLoadFile(){
 
     std::string path;
     CServerSocket::GetInstance().GetFilePath(path);
     FILE* fp = nullptr;
-    long long data = 0;
-    if (fopen_s(&fp, path.c_str(), "rb") != 0 ) {
-        Cpacket pack(4, (BYTE*)data, 8);
+    if (fopen_s(&fp, path.c_str(), "rb") != 0 || fp == NULL) {
         OutputDebugString(_T("打开文件失败"));
-        CServerSocket::GetInstance().Send(pack);
+        // 发送错误回包（空数据） 使用 CMD_DOWNLOAD_FILE 发送失败标志
+        Cpacket errpack(CMD::CMD_DOWNLOAD_FILE, NULL, 0);
+        CServerSocket::GetInstance().Send(errpack);
         return -1;
     }
-    if (fp != NULL) {
-        fseek(fp, 0, SEEK_END);
-        data = _ftelli64(fp);
-        Cpacket head(4, (BYTE*)data, 8);
-        fseek(fp, 0, SEEK_SET);
 
-        char Buffer[1024] = "";
-        size_t nRead = 0;
-        do {
-            nRead = fread(Buffer, 1, sizeof(Buffer), fp);
-            Cpacket pack(4, (BYTE*)Buffer, nRead);
-            CServerSocket::GetInstance().Send(pack);
+    // 获取文件大小
+    _fseeki64(fp, 0, SEEK_END);
+    long long fileSize = _ftelli64(fp);
+    _fseeki64(fp, 0, SEEK_SET);
 
-        } while (nRead >= 1024 && CServerSocket::GetInstance().Send((BYTE*)Buffer, nRead));
-        fclose(fp);
+    // 发送文件大小包（客户端预期首包为 CMD_DOWNLOAD_FILE，包含文件大小）
+    unsigned char sizeBuf[sizeof(fileSize)];
+    memcpy(sizeBuf, &fileSize, sizeof(fileSize));
+    Cpacket head(CMD::CMD_DOWNLOAD_FILE, (BYTE*)sizeBuf, sizeof(fileSize));
+    CServerSocket::GetInstance().Send(head);
+
+    const size_t CHUNK = 4096;
+    std::vector<char> buffer(CHUNK);
+    size_t nRead = 0;
+    while ((nRead = fread(buffer.data(), 1, CHUNK, fp)) > 0) {
+        Cpacket pack(CMD::CMD_DOWNLOAD_FILE, (BYTE*)buffer.data(), nRead);
+        if (!CServerSocket::GetInstance().Send(pack)) {
+            OutputDebugString(_T("发送文件数据失败"));
+            break;
+        }
     }
+    fclose(fp);
 
-    Cpacket pack(4, NULL, 0);
-    CServerSocket::GetInstance().Send(pack);
+    // 发送结束标志包
+    Cpacket eofpack(CMD::CMD_EOF, NULL, 0);
+    CServerSocket::GetInstance().Send(eofpack);
+
     return 0;
 }
 
@@ -408,6 +446,9 @@ int ExcuteCommand(int nCmd) {
         break;
     case 4:
         ret = DownLoadFile(); //下载文件
+        break;
+    case 11:
+        ret = DeleteFile();
         break;
     case 5:
         ret = MouseEvent();
