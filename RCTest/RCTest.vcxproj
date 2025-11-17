@@ -45,11 +45,13 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Async</ExceptionHandling>
-  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\Win32\v140\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310d.lib;opencv_imgproc310d.lib;opencv_imgcodecs310d.lib;opencv_highgui310d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -64,11 +66,13 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Async</ExceptionHandling>
-  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\x64\v140\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310d.lib;opencv_imgproc310d.lib;opencv_imgcodecs310d.lib;opencv_highgui310d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -79,13 +83,15 @@
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\Win32\v140\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310.lib;opencv_imgproc310.lib;opencv_imgcodecs310.lib;opencv_highgui310.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -96,17 +102,24 @@
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+  <AdditionalIncludeDirectories>$(SolutionDir)RemoteControl_Server\include;$(SolutionDir)RemoteControl_Server\include\core;$(SolutionDir)RemoteControl_Server\include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\x64\v140\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310.lib;opencv_imgproc310.lib;opencv_imgcodecs310.lib;opencv_highgui310.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="..\RemoteControl_Server\include\network\ServerSocket.h" />
+    <ClInclude Include="..\RemoteControl_Server\include\core\Enities.h" />
+    <ClInclude Include="..\RemoteControl_Server\include\core\screenCapture.h" />
+    <ClInclude Include="..\RemoteControl_Server\include\core\diffAlgorithm.h" />
+    <ClInclude Include="..\RemoteControl_Server\include\ui\LockDialog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="test.cpp" />

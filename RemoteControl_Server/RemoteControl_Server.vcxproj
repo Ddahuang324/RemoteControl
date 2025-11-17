@@ -84,12 +84,14 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\Win32\v140\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310d.lib;opencv_imgproc310d.lib;opencv_imgcodecs310d.lib;opencv_highgui310d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -106,11 +108,13 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\Win32\v140\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310.lib;opencv_imgproc310.lib;opencv_imgcodecs310.lib;opencv_highgui310.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -125,15 +129,20 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\x64\v140\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310d.lib;opencv_imgproc310d.lib;opencv_imgcodecs310d.lib;opencv_highgui310d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I "$(ProjectDir)..\packages\opencv.win.native.redist.310.3.0\build\native\bin\x64\v140\$(Configuration)\*.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -146,11 +155,13 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\pch;$(ProjectDir)include\network;$(ProjectDir)include\utils;$(ProjectDir)include\core;$(ProjectDir)include\ui;$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\packages\opencv.win.native.310.3.0\build\native\lib\x64\v140\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_core310.lib;opencv_imgproc310.lib;opencv_imgcodecs310.lib;opencv_highgui310.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

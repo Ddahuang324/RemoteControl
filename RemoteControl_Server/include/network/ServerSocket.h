@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../pch/framework.h"
 #include "Enities.h"
 #include "../utils/ThreadPool.hpp"
@@ -176,7 +177,25 @@ public:
 	virtual void SendPacket(const Cpacket& packet) {
 		std::lock_guard<std::mutex> lock(m_sendMutex);
 		auto buffer = packet.SerializePacket();
-		send(m_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0);
+
+		const char* ptr = reinterpret_cast<const char*>(buffer.data());
+		size_t remaining = buffer.size();
+
+		// 每次发送的最大块大小 (64KB)
+		const size_t CHUNK_SIZE = 64 * 1024;
+
+		while (remaining > 0) {
+			int sendSize = static_cast<int>(remaining < CHUNK_SIZE ? remaining : CHUNK_SIZE);
+			int sent = send(m_clientSocket, ptr, sendSize, 0);
+
+			if (sent == SOCKET_ERROR) {
+				std::cerr << "SendPacket failed with error: " << WSAGetLastError() << std::endl;
+				return; // 发送失败，避免死循环或崩溃
+			}
+
+			ptr += sent;
+			remaining -= sent;
+		}
 	}
 	
 	void SendErrorPacket(const std::string& errorMessage) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#define USE_OPENCV 1
+
 #include <gdiplus.h>
 #include <vector>
 #include <tuple>
@@ -11,9 +13,145 @@
 #include <atlimage.h>
 #include <iostream>
 #include <sstream>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <ctime>
+#include <mutex>
 
 using BYTE = unsigned char;
 using namespace Gdiplus;
+
+// 前置声明：避免在类定义中引用后面定义的自由函数/静态函数导致编译错误
+std::tuple<int,int,int,int> DetectScreenDiff(const std::vector<BYTE>& prevPixels, const std::vector<BYTE>& currPixels, int width, int height, int bytesPerPixel);
+static void SaveCImageToStreamFallback(const CImage& img, IStream* pStream);
+
+// -------------------------
+// Object-oriented wrappers (轻量实现，基于现有自由函数以保持行为不变)
+// -------------------------
+
+// 简单的线程安全缓冲池，用作像素缓冲复用
+class FrameBufferPool {
+public:
+    static FrameBufferPool& Instance() {
+        static FrameBufferPool inst;
+        return inst;
+    }
+
+    std::vector<BYTE> Acquire(size_t size) {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        for (auto it = m_pool.begin(); it != m_pool.end(); ++it) {
+            if (it->capacity() >= size) {
+                std::vector<BYTE> buf = std::move(*it);
+                m_pool.erase(it);
+                buf.clear();
+                buf.reserve(size);
+                return buf;
+            }
+        }
+        std::vector<BYTE> buf;
+        buf.reserve(size);
+        return buf;
+    }
+
+    void Release(std::vector<BYTE>&& buf) {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        buf.clear();
+        if (m_pool.size() < m_maxPoolSize) m_pool.emplace_back(std::move(buf));
+    }
+
+private:
+    FrameBufferPool() = default;
+    std::mutex m_mutex;
+    std::vector<std::vector<BYTE>> m_pool;
+    const size_t m_maxPoolSize = 8;
+};
+
+// Diff 引擎外观，封装选择逻辑
+class DiffEngine {
+public:
+    static DiffEngine& Instance() {
+        static DiffEngine inst;
+        return inst;
+    }
+    std::tuple<int,int,int,int> Detect(const std::vector<BYTE>& prev, const std::vector<BYTE>& curr, int width, int height, int bytesPerPixel) const {
+        // 调用已存在的 DetectScreenDiff（自定义逐像素实现）以避免对尚未声明的竞争函数依赖
+        return DetectScreenDiff(prev, curr, width, height, bytesPerPixel);
+    }
+private:
+    DiffEngine() = default;
+};
+
+// Image 编码外观，封装 PNG 编码入口
+class ImageCodec {
+public:
+    static ImageCodec& Instance() {
+        static ImageCodec inst;
+        return inst;
+    }
+    std::vector<BYTE> ToPNG(const CImage& img) {
+        // 使用现有的 SaveCImageToStreamFallback 将 CImage 写入 IStream，然后用 WinAPI 直接锁定 HGLOBAL 提取字节
+        IStream* pStreamRaw = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, &pStreamRaw);
+        if (FAILED(hr) || pStreamRaw == nullptr) {
+            throw std::runtime_error("ImageCodec::ToPNG: CreateStreamOnHGlobal failed.");
+        }
+
+        // 直接使用原始指针，避免依赖后面才定义的 ScopedStream
+        SaveCImageToStreamFallback(img, pStreamRaw);
+
+        HGLOBAL hGlobal = nullptr;
+        hr = GetHGlobalFromStream(pStreamRaw, &hGlobal);
+        if (FAILED(hr) || hGlobal == nullptr) {
+            pStreamRaw->Release();
+            throw std::runtime_error("ImageCodec::ToPNG: GetHGlobalFromStream failed.");
+        }
+
+        BYTE* pData = static_cast<BYTE*>(::GlobalLock(hGlobal));
+        if (pData == nullptr) {
+            pStreamRaw->Release();
+            throw std::runtime_error("ImageCodec::ToPNG: GlobalLock returned NULL.");
+        }
+        SIZE_T dataSize = ::GlobalSize(hGlobal);
+        if (dataSize == 0) {
+            ::GlobalUnlock(hGlobal);
+            pStreamRaw->Release();
+            throw std::runtime_error("ImageCodec::ToPNG: GlobalSize returned zero.");
+        }
+        std::vector<BYTE> out(pData, pData + static_cast<size_t>(dataSize));
+        ::GlobalUnlock(hGlobal);
+        pStreamRaw->Release();
+        return out;
+    }
+private:
+    ImageCodec() = default;
+};
+
+// 序列化工具：用于把 ROI/尺寸 + 编码数据合并成最终字节包
+class ScreenSerializer {
+public:
+    static std::vector<BYTE> FromFullImage(const std::vector<BYTE>& pngBytes, int width, int height) {
+        std::vector<BYTE> out;
+        int zero = 0;
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&zero), reinterpret_cast<const BYTE*>(&zero) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&zero), reinterpret_cast<const BYTE*>(&zero) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&width), reinterpret_cast<const BYTE*>(&width) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&height), reinterpret_cast<const BYTE*>(&height) + sizeof(int));
+        out.insert(out.end(), pngBytes.begin(), pngBytes.end());
+        return out;
+    }
+
+    static std::vector<BYTE> FromDiff(int x, int y, int w, int h, const std::vector<BYTE>& pngBytes) {
+        std::vector<BYTE> out;
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&x), reinterpret_cast<const BYTE*>(&x) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&y), reinterpret_cast<const BYTE*>(&y) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&w), reinterpret_cast<const BYTE*>(&w) + sizeof(int));
+        out.insert(out.end(), reinterpret_cast<const BYTE*>(&h), reinterpret_cast<const BYTE*>(&h) + sizeof(int));
+        out.insert(out.end(), pngBytes.begin(), pngBytes.end());
+        return out;
+    }
+};
+
 
 // Helper: get encoder CLSID for a given mime type (e.g., "image/png")
 // 修复：C2264 错误通常是因为函数声明和定义不一致，或未声明。建议将 static int GetEncoderClsid(...) 的声明提前到文件顶部，并确保声明和定义一致。
@@ -175,6 +313,19 @@ private:
     HDC m_hdc;
     bool m_acquired;
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // 自定义差异检测算法：逐像素比较，返回变化矩形的边界
 // 返回：minX, minY, maxX, maxY，如果无变化则 minX > maxX
@@ -339,6 +490,18 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
         int diffWidth = maxX - minX + 1;
         int diffHeight = maxY - minY + 1;
 
+        // 防御性检查：避免异常的 ROI 导致溢出或超大分配
+        if (diffWidth <= 0 || diffHeight <= 0) {
+            throw std::runtime_error("CreateScreenData: computed invalid diff dimensions.");
+        }
+        if (diffWidth > nWidth || diffHeight > nHeight) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: clamping diff dims from (" << diffWidth << "," << diffHeight << ") to max (" << nWidth << "," << nHeight << ")";
+            std::cout << oss.str() << std::endl;
+            diffWidth = std::min(diffWidth, nWidth);
+            diffHeight = std::min(diffHeight, nHeight);
+        }
+
         // 创建差异图像
         CImage diffImage;
         // 尝试使用更稳妥的像素格式创建（优先 32bpp，其次 24bpp）
@@ -429,15 +592,29 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
             throw std::runtime_error("GetHGlobalFromStream failed for diff.");
         }
 
+        std::cout << "CreateScreenData: GetHGlobalFromStream returned hGlobal=" << hGlobal << std::endl;
+
         GlobalLockRAII lock(hGlobal);
         BYTE* pData = static_cast<BYTE*>(lock.get());
         if (pData == nullptr) {
             throw std::runtime_error("GlobalLock failed for diff.");
         }
 
+        std::cout << "CreateScreenData: GlobalLock succeeded, pData=" << static_cast<void*>(pData) << std::endl;
         size_t dataSize = ::GlobalSize(hGlobal);
         if (dataSize == 0) {
             throw std::runtime_error("GlobalSize returned zero for diff.");
+        }
+        std::cout << "CreateScreenData: diff PNG dataSize=" << dataSize << " bytes" << std::endl;
+
+        // debug-saving of diff PNG removed to silence debug logs and disk writes
+        // 防御性上限，防止某些异常情况返回极大 size 导致内存/IO 崩溃
+        const size_t MAX_PNG_SIZE = 50ull * 1024ull * 1024ull; // 50 MB
+        if (dataSize > MAX_PNG_SIZE) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: PNG dataSize too large (" << dataSize << " bytes) - aborting to avoid OOM.";
+            std::cerr << oss.str() << std::endl;
+            throw std::runtime_error("CreateScreenData: PNG payload exceeds allowed maximum size.");
         }
 
         // 序列化数据：x, y, w, h + PNG
@@ -475,15 +652,28 @@ inline std::vector<BYTE> CreateScreenData(const CImage& ScreenImage, int minX, i
             throw std::runtime_error("GetHGlobalFromStream failed.");
         }
 
+        std::cout << "CreateScreenData: GetHGlobalFromStream (full) returned hGlobal=" << hGlobal << std::endl;
+
         GlobalLockRAII lock(hGlobal);
         BYTE* pData = static_cast<BYTE*>(lock.get());
         if (pData == nullptr) {
             throw std::runtime_error("GlobalLock failed.");
         }
 
+        std::cout << "CreateScreenData: GlobalLock succeeded (full), pData=" << static_cast<void*>(pData) << std::endl;
         size_t dataSize = ::GlobalSize(hGlobal);
         if (dataSize == 0) {
             throw std::runtime_error("GlobalSize returned zero.");
+        }
+        std::cout << "CreateScreenData: full PNG dataSize=" << dataSize << " bytes" << std::endl;
+
+        // debug-saving of full PNG removed to silence debug logs and disk writes
+        const size_t MAX_PNG_SIZE_FULL = 100ull * 1024ull * 1024ull; // 100 MB for full-screen
+        if (dataSize > MAX_PNG_SIZE_FULL) {
+            std::ostringstream oss;
+            oss << "CreateScreenData: full-screen PNG too large (" << dataSize << " bytes) - aborting to avoid OOM.";
+            std::cerr << oss.str() << std::endl;
+            throw std::runtime_error("CreateScreenData: full-screen PNG payload exceeds allowed maximum size.");
         }
 
         // 序列化数据：x=0, y=0, w=nWidth, h=nHeight + PNG
@@ -527,7 +717,7 @@ inline std::vector<BYTE> GenerateScreenData(const CImage& screenImage, const std
     std::cout << "[GenerateScreenData] Calling DetectScreenDiff..." << std::endl;
 
     // 使用稳定的自定义差异算法，避免竞争/计时引入的潜在未定义行为
-    auto [minX, minY, maxX, maxY] = DetectScreenDiff(prevPixels, currPixels, width, height, bytesPerPixel);
+    auto [minX, minY, maxX, maxY] = DetectScreenDiffOpenCVRaw(prevPixels, currPixels, width, height);
 
     std::cout << "[GenerateScreenData] DetectScreenDiff returned: minX=" << minX << " minY=" << minY 
               << " maxX=" << maxX << " maxY=" << maxY << std::endl;

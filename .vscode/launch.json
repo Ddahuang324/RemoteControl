@@ -5,23 +5,23 @@
             "name": "Debug RemoteControl_Server",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/Debug/RemoteControl_Server.exe",
+            "program": "${workspaceFolder}/x64/Debug/RemoteControl_Server.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false
+            "console": "externalTerminal"
         },
         {
             "name": "Debug RemoteControl_Client",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/Debug/RemoteControl_Client.exe",
+            "program": "${workspaceFolder}/x64/Debug/RemoteControl_Client.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false
+            "console": "externalTerminal"
         },
         {
             "name": "Debug: C++ ",
@@ -48,13 +48,15 @@
             "args": []
         },
         {
-            "name": "C++ Processing (LLDB)",
-            "type": "cppdbg",
-            "request": "attach",
-            "program": "${workspaceFolder}/build/${input:executableName}",
-            "processId": "${command:pickProcess}",
-            "MIMode": "lldb",
-            "miDebuggerPath": "/usr/bin/lldb"
+            "name": "Debug RCTest",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/x64/Debug/RCTest.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal"
         }
     ],
     "compounds": [
@@ -66,10 +68,10 @@
             ]
         },
         {
-            "name": "Python + C++",
+            "name": "Debug Server and RCTest",
             "configurations": [
-                "Debug Python",
-                "C++ Processing (LLDB)"
+                "Debug RemoteControl_Server",
+                "Debug RCTest"
             ]
         }
     ],

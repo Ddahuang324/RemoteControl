@@ -15,10 +15,9 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-#pragma comment (linker , "/subsystem:windows /ENTRY:mainCRTStartup")
-#pragma comment (linker , "/subsystem:windows /ENTRY:WinMainCRTStartup")
-#pragma comment (linker , "/subsystem:console /ENTRY:mainCRTStartup")
-#pragma comment (linker , "/subsystem:console /ENTRY:WinMainCRTStartup")
+// Removed conflicting linker pragmas so the project uses the
+// linker subsystem/entry point defined in the project settings
+// and the standard `main()` entry in this translation unit.
 
 // 唯一的应用程序对象
 
