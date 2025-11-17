@@ -78,6 +78,7 @@
         "resumable": "cpp",
         "future": "cpp",
         "queue": "cpp",
-        "complex": "cpp"
+        "complex": "cpp",
+        "*.rh": "cpp"
     }
 }

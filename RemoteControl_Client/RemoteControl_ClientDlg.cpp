@@ -15,6 +15,7 @@
 #include <set>          // 【新增】
 #include <vector>       // 【新增】
 #include <cmath>        // 【新增】
+#include "MonitorWnd.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -125,6 +126,7 @@ void CRemoteControlClientDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT1, m_editPort);
 	DDX_Control(pDX, IDC_BUTTON2, m_btnViewFileInfo);
 	DDX_Control(pDX, IDC_BTN_TEST, m_btnConnect);
+	DDX_Control(pDX, IDC_BTN_START_MONITOR, m_btnStartMonitor);
 }
 
 BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
@@ -145,6 +147,7 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_COMMAND(ID_OPEN_FILE, &CRemoteControlClientDlg::OnOpenFile)
 	ON_MESSAGE(WM_UPDATE_PROGRESS, &CRemoteControlClientDlg::OnUpdateProgress)
 	ON_MESSAGE(WM_CLOSE_PROGRESS, &CRemoteControlClientDlg::OnCloseProgress)
+	ON_BN_CLICKED(IDC_BTN_START_MONITOR, &CRemoteControlClientDlg::OnBnClickedBtnStartMonitor)
 END_MESSAGE_MAP()
 
 
@@ -190,6 +193,8 @@ BOOL CRemoteControlClientDlg::OnInitDialog()
 
 	// 初始化连接按钮文本
 	m_btnConnect.SetWindowText(_T("连接"));
+
+	// 屏幕监视按钮由资源定义，DDX 已绑定到 m_btnStartMonitor
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -644,6 +649,11 @@ void CRemoteControlClientDlg::OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult)
 	}
 }
 
+void CRemoteControlClientDlg::OnBnClickedBtnStartMonitor()
+{
+	StartMonitor();
+}
+
 void CRemoteControlClientDlg::OnDownloadFile()
 {
 	if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
@@ -758,4 +768,21 @@ LRESULT CRemoteControlClientDlg::OnCloseProgress(WPARAM wParam, LPARAM lParam)
     pDlg->DestroyWindow();
     delete pDlg;
     return 0;
+}
+
+// 启动监视窗口（可绑定到按钮的事件处理器）
+void CRemoteControlClientDlg::StartMonitor()
+{
+	if (!m_bConnected) {
+		MessageBox(_T("请先连接服务器！"));
+		return;
+	}
+
+	CMonitorWnd* pMonitor = new CMonitorWnd();
+	if (!pMonitor->CreateMonitorWindow(this, &m_clientSocket)) {
+		MessageBox(_T("创建监视窗口失败"));
+		delete pMonitor;
+		return;
+	}
+	pMonitor->ShowWindow(SW_SHOW);
 }

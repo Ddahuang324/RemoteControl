@@ -15,6 +15,7 @@
 #define IDC_LIST4                       1005
 #define IDC_BUTTON2                     1006
 #define IDC_PROGRESS_DOWNLOAD           1007
+#define IDC_BTN_START_MONITOR           1008
 #define IDD_DOWNLOAD_PROGRESS_DIALOG    103
 #define ID_DOWNLOAD_FILE                32771
 #define ID_DELETE_FILE                  32772
@@ -26,7 +27,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        130
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1007
+#define _APS_NEXT_CONTROL_VALUE         1009
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

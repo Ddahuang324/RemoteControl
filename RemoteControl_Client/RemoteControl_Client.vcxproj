@@ -199,6 +199,7 @@
     <ClInclude Include="Enities.h" />
     <ClInclude Include="include\MultiThread\ThreadPool.hpp" />
     <ClInclude Include="DownloadProgressDlg.h" />
+    <ClInclude Include="MonitorWnd.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="clientSocket.cpp" />
@@ -211,6 +212,7 @@
     <ClCompile Include="RemoteControl_Client.cpp" />
     <ClCompile Include="RemoteControl_ClientDlg.cpp" />
     <ClCompile Include="DownloadProgressDlg.cpp" />
+    <ClCompile Include="MonitorWnd.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RemoteControlClient.rc" />

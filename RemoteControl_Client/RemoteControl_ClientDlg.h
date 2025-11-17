@@ -13,6 +13,7 @@
 // 前向声明
 class CRemoteControlClientDlg;
 class CDownloadProgressDlg;
+class CMonitorWnd;
 
 // 定义自定义消息
 #define WM_UPDATE_PROGRESS (WM_USER + 1)
@@ -68,6 +69,9 @@ protected:
 		CButton m_btnViewFileInfo;        // 查看文件信息按钮 IDC_BUTTON2
 		CButton m_btnConnect;             // 连接按钮 IDC_BTN_TEST
 
+		// 屏幕监视按钮（由资源定义）
+		CButton m_btnStartMonitor;
+
 		CString m_strServerIP = L"127.0.0.1"; // 当前服务器IP
 		int m_nServerPort = 9527; // 当前服务器端口，默认9527
 
@@ -92,6 +96,9 @@ protected:
 		afx_msg void OnIpnFieldchangedIpaddressServ(NMHDR* pNMHDR, LRESULT* pResult);
 		afx_msg void OnEnChangeEdit1();
 		afx_msg void OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult);
+		afx_msg void OnBnClickedBtnStartMonitor();
+		// 启动屏幕监视窗口（可在资源中绑定到按钮）
+		void StartMonitor();
 		afx_msg void OnDownloadFile();
 		afx_msg void OnDeleteFile();
 		afx_msg void OnOpenFile();
