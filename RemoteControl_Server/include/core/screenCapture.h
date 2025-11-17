@@ -55,7 +55,7 @@ private:
 };
 
 // 辅助函数：捕获屏幕图像并返回图像和像素数据
-inline std::tuple<std::shared_ptr<CImage>, std::vector<BYTE>, int, int, int> CaptureScreenImage() {
+inline std::tuple<std::shared_ptr<CImage>, BYTE*, int, int, int> CaptureScreenImage() {
     // 使用 DISPLAY 设备环境，优先尝试 CreateDC("DISPLAY")，但在失败或 BitBlt 效果不佳时回退到 GetDC(NULL)
     ScopedHDC hDisplayDC(CreateDC(L"DISPLAY", nullptr, nullptr, nullptr));
     if (!hDisplayDC) {
@@ -174,28 +174,12 @@ inline std::tuple<std::shared_ptr<CImage>, std::vector<BYTE>, int, int, int> Cap
     size_t expectedSize = static_cast<size_t>(nHeight) * stride;
     std::cout << "CaptureScreenImage: stride=" << stride << " expectedSize=" << expectedSize << " bitsPtr=" << static_cast<void*>(currentPixels) << std::endl;
 
-    std::vector<BYTE> currentFramePixels;
-    currentFramePixels.resize(expectedSize);
-
-    bool copySucceeded = false;
-    unsigned int sehCode = 0;
-    if (SEH_Memcpy_NoObj(currentFramePixels.data(), currentPixels, expectedSize, &sehCode)) {
-        copySucceeded = true;
-    } else {
-        std::ostringstream oss;
-        oss << "CaptureScreenImage: SEH-protected copy failed, code=0x" << std::hex << sehCode << std::dec;
-        std::cerr << oss.str() << std::endl;
-        currentFramePixels.clear();
+    // 不再在此处分配并返回像素 vector，改为直接返回指向 CImage 内部像素的指针。
+    // 上层调用者可使用 FrameBufferPool 获取缓冲并将数据复制到可复用缓冲中，以避免每帧 heap 分配。
+    if (!currentPixels) {
+        throw std::runtime_error("CaptureScreenImage: GetBits returned nullptr.");
     }
-
-    if (copySucceeded) {
-        std::cout << "CaptureScreenImage: captured pixels vector size=" << currentFramePixels.size() << std::endl;
-    } else {
-        std::cerr << "CaptureScreenImage: failed to capture pixels - currentFramePixels is empty." << std::endl;
-    }
-
-    // 返回实际使用的位深，以与上层处理保持一致
-    return {ScreenImage, currentFramePixels, nWidth, nHeight, createdBpp};
+    return {ScreenImage, currentPixels, nWidth, nHeight, createdBpp};
 }
 
 // CaptureService: 持有上一帧状态以避免在函数中使用静态变量
@@ -209,19 +193,42 @@ public:
     void CaptureAndSend(CServerSocket& ClientSocket, const Cpacket& packet) {
         std::lock_guard<std::mutex> lk(m_mutex);
         try {
-            auto [ScreenImagePtr, currentFramePixels, nWidth, nHeight, nBitperPixel] = CaptureScreenImage();
+            auto [ScreenImagePtr, bitsPtr, nWidth, nHeight, nBitperPixel] = CaptureScreenImage();
             auto& ScreenImage = *ScreenImagePtr;
 
+            // 计算 stride/大小并从像素池获取可复用缓冲，避免每帧分配
+            int bytesPerPixel = nBitperPixel / 8;
+            if (bytesPerPixel <= 0) bytesPerPixel = 4;
+            const int stride = ((nWidth * bytesPerPixel + 31) / 32) * 4;
+            size_t expectedSize = static_cast<size_t>(nHeight) * static_cast<size_t>(stride);
+
+            // Acquire buffer from pool
+            std::vector<BYTE> currFrame = FrameBufferPool::Instance().Acquire(expectedSize);
+            currFrame.resize(expectedSize);
+
+            unsigned int sehCode = 0;
+            if (!SEH_Memcpy_NoObj(currFrame.data(), bitsPtr, expectedSize, &sehCode)) {
+                std::ostringstream oss;
+                oss << "CaptureScreenImage: SEH-protected copy failed in CaptureAndSend, code=0x" << std::hex << sehCode << std::dec;
+                std::cerr << oss.str() << std::endl;
+                // Release the acquired buffer back and abort this capture
+                FrameBufferPool::Instance().Release(std::move(currFrame));
+                throw std::runtime_error("Failed to copy pixels from CImage to reusable buffer.");
+            }
+
             // 使用已有的 GenerateScreenData（保持向后兼容）
-            std::vector<BYTE> screenData = GenerateScreenData(ScreenImage, m_previousFramePixels, currentFramePixels, nWidth, nHeight, nBitperPixel);
+            std::vector<BYTE> screenData = GenerateScreenData(ScreenImage, m_previousFramePixels, currFrame, nWidth, nHeight, nBitperPixel);
 
             std::cout << "Screen data size: " << screenData.size() << " bytes" << std::endl;
 
             Cpacket screenPacket(CMD::CMD_SCREEN_CAPTURE, screenData);
             ClientSocket.SendPacket(screenPacket);
 
-            // 更新上一帧（使用 move 以避免拷贝）
-            m_previousFramePixels = std::move(currentFramePixels);
+            // 更新上一帧：将旧的 previous 放回池中，然后保存当前帧为新的 previous
+            if (!m_previousFramePixels.empty()) {
+                FrameBufferPool::Instance().Release(std::move(m_previousFramePixels));
+            }
+            m_previousFramePixels = std::move(currFrame);
             m_prevWidth = nWidth;
             m_prevHeight = nHeight;
         }
