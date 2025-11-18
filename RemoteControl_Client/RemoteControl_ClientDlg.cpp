@@ -92,6 +92,7 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_TEST, &CRemoteControlClientDlg::OnBnClickedBtnTest)
+	ON_BN_CLICKED(IDC_BTN_WATCH_SCREEN, &CRemoteControlClientDlg::OnBnClickedBtnWatchScreen)
 	ON_BN_CLICKED(IDC_BUTTON2, &CRemoteControlClientDlg::OnBnClickedButton2)
 	ON_NOTIFY(TVN_SELCHANGED, IDC_TREE3, &CRemoteControlClientDlg::OnTvnSelchangedTree3)
 	ON_NOTIFY(NM_DBLCLK, IDC_TREE3, &CRemoteControlClientDlg::OnDblclkTree3)
@@ -262,6 +263,13 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 		m_btnConnect.SetWindowText(_T("连接"));
 		MessageBox(_T("已断开连接"));
 	}
+}
+
+void CRemoteControlClientDlg::OnBnClickedBtnWatchScreen()
+{
+	// 打开屏幕查看对话框（传入 socket 实例指针）
+	CScreenViewDlg dlg(&m_client, this);
+	dlg.DoModal();
 }
 
 

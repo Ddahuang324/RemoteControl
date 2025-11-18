@@ -11,6 +11,8 @@
 #include <list>
 #include <vector>
 #include <atlimage.h>
+#include <thread>
+#include <atomic>
 
 
 typedef struct file_info {
@@ -31,10 +33,8 @@ typedef struct file_info {
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-#pragma comment (linker , "/subsystem:windows /ENTRY:mainCRTStartup")
-#pragma comment (linker , "/subsystem:windows /ENTRY:WinMainCRTStartup")
-#pragma comment (linker , "/subsystem:console /ENTRY:mainCRTStartup")
-#pragma comment (linker , "/subsystem:console /ENTRY:WinMainCRTStartup")
+// Remove conflicting linker pragmas that forced different entry points.
+// The project settings determine the correct subsystem/entry for this build.
 
 // 唯一的应用程序对象
 
@@ -381,51 +381,95 @@ int TestConnect() {
     return 0;
 }
 int sendScreen() {
-    CImage screen;//适合GDI编程的 库 atlimage.h ,GDI:Graphics Device Interface
+    CImage screen;
     HDC hScreen = ::GetDC(NULL);
-    int nBitPerPixel = GetDeviceCaps(hScreen, BITSPIXEL);//涉及到了位图的概念 (计算机色彩)
+    if (!hScreen) {
+        OutputDebugString(_T("sendScreen: GetDC(NULL) failed"));
+        return -1;
+    }
+    int nBitPerPixel = GetDeviceCaps(hScreen, BITSPIXEL);
     int nWidth = GetDeviceCaps(hScreen, HORZRES);
     int nHeight = GetDeviceCaps(hScreen, VERTRES);
     screen.Create(nWidth, nHeight, nBitPerPixel);
     BitBlt(screen.GetDC(), 0, 0, nWidth, nHeight, hScreen, 0, 0, SRCCOPY);
     ReleaseDC(NULL, hScreen);
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, 0); //申请内存
-    if(hMem  == NULL){
-        OutputDebugString(_T("申请内存失败"));
+
+    IStream* pStream = NULL;
+    HRESULT hr = CreateStreamOnHGlobal(NULL, TRUE, &pStream);
+    if (FAILED(hr) || pStream == NULL) {
+        OutputDebugString(_T("sendScreen: CreateStreamOnHGlobal failed"));
+        if (pStream) pStream->Release();
+        screen.ReleaseDC();
         return -1;
     }
-    IStream* pStream = NULL;
-    HRESULT ret = CreateStreamOnHGlobal(NULL, TRUE, &pStream);
-    if(ret == S_OK){
-        OutputDebugString(_T("创建内存流成功"));
-        LARGE_INTEGER bg = { 0 };
 
-        screen.Save(pStream, Gdiplus::ImageFormatPNG); //保存到内存流中
-        pStream->Seek(bg, STREAM_SEEK_SET, NULL); //将指针指向流的开始
-        PBYTE pData =(PBYTE) GlobalLock(hMem);
-        size_t nsize = GlobalSize(hMem);
-        Cpacket pack(6, pData, nsize);
-        GlobalUnlock(hMem);
-       
-    }
-   
-    /*
-    
-     for (int i = 0; i < 10 ; i++){
-        DWORD tick = GetTickCount64();
-        screen.Save(_T("test.png"), Gdiplus::ImageFormatPNG);
-        TRACE(_T("保存png屏幕截图耗时： %d ms\n"), GetTickCount64() - tick);
-        tick = GetTickCount64();
-        screen.Save(_T("test.jpg"), Gdiplus::ImageFormatJPEG);
-        TRACE(_T("保存jpg屏幕截图耗时： %d ms\n"), GetTickCount64() - tick);
+    // 保存为 PNG 到内存流
+    if (screen.Save(pStream, Gdiplus::ImageFormatPNG) != S_OK) {
+        OutputDebugString(_T("sendScreen: Save to PNG failed"));
+        pStream->Release();
+        screen.ReleaseDC();
+        return -1;
     }
 
-    */
+    // 获取流对应的 HGLOBAL
+    HGLOBAL hGlobal = NULL;
+    if (GetHGlobalFromStream(pStream, &hGlobal) != S_OK || hGlobal == NULL) {
+        OutputDebugString(_T("sendScreen: GetHGlobalFromStream failed"));
+        pStream->Release();
+        screen.ReleaseDC();
+        return -1;
+    }
+
+    SIZE_T nsize = GlobalSize(hGlobal);
+    if (nsize == 0) {
+        OutputDebugString(_T("sendScreen: GlobalSize returned 0"));
+        pStream->Release();
+        screen.ReleaseDC();
+        return -1;
+    }
+
+    BYTE* pData = (BYTE*)GlobalLock(hGlobal);
+    if (pData == NULL) {
+        OutputDebugString(_T("sendScreen: GlobalLock failed"));
+        pStream->Release();
+        screen.ReleaseDC();
+        return -1;
+    }
+
+    // 发送包（命令 6 用于屏幕数据）
+    Cpacket pack(6, pData, (size_t)nsize);
+    bool bRet = CServerSocket::GetInstance().Send(pack);
+    CStringA msg;
+    msg.Format("sendScreen: sent %zu bytes, success=%d\n", (size_t)nsize, bRet);
+    OutputDebugStringA(msg);
+
+    GlobalUnlock(hGlobal);
     pStream->Release();
+    // GlobalFree(hGlobal); // 不显式释放由 CreateStreamOnHGlobal 分配的 HGLOBAL when TRUE, stream owns it
     screen.ReleaseDC();
-    GlobalFree(hMem);
-    
-    return 0;
+
+    return bRet ? 0 : -1;
+}
+
+// 屏幕流控制
+static std::thread g_screenThread;
+static std::atomic<bool> g_screenRunning{ false };
+
+void StartScreenStream(int intervalMs = 100) {
+    if (g_screenRunning.load()) return;
+    g_screenRunning.store(true);
+    g_screenThread = std::thread([intervalMs]() {
+        while (g_screenRunning.load()) {
+            sendScreen();
+            std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+        }
+    });
+}
+
+void StopScreenStream() {
+    if (!g_screenRunning.load()) return;
+    g_screenRunning.store(false);
+    if (g_screenThread.joinable()) g_screenThread.join();
 }
 
 
@@ -455,6 +499,14 @@ int ExcuteCommand(int nCmd) {
         break;
     case 6://发送屏幕内容(发送屏幕截图)
         ret = sendScreen();
+        break;
+    case 10: // 开始屏幕流
+        StartScreenStream(100); // 默认 100ms 间隔（约10fps），可调整
+        ret = 0;
+        break;
+    case 13: // 停止屏幕流
+        StopScreenStream();
+        ret = 0;
         break;
     case 7: //锁定机器
         ret = LockMachine();

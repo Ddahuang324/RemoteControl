@@ -1,14 +1,16 @@
-﻿#pragma once
+#pragma once
 #include "pch.h"
 #include "framework.h"
+#include "Enities.h"
 #include <string>
 #include <memory>
 #include <stdexcept>
 #include <ws2tcpip.h>
 #include <vector>
+#include <atomic>
 
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE (4 * 1024 * 1024) // 4MB buffer to accommodate large PNG frames
 
 
 
@@ -152,6 +154,7 @@ private:
             throw std::runtime_error("Socket environment initialization failed");
         }
         m_Buffer.resize(BUFFER_SIZE);
+        m_hScreenViewWnd = NULL;
 
     }
     ~CClientSocket() {
@@ -169,12 +172,14 @@ private:
     std::vector<char> m_Buffer;
     SOCKET m_serv;
     Cpacket m_packet;
+    HWND m_hScreenViewWnd;
 
 public:
 
     static void CleanUp() {
         WSACleanup();
     }
+    void SetScreenViewWnd(HWND hWnd);
     static CClientSocket& GetInstance() {
         static CClientSocket instance;
         return instance;
@@ -206,11 +211,11 @@ public:
 
     }
 
+    
 
-
-    int DealCommand() {
+    int DealCommand(int timeoutMs = -1, std::atomic<bool>* stopFlag = nullptr) {
         if (m_serv == INVALID_SOCKET) return -1;
-        //char Buffer[1024] = " ";
+        
         auto Buffer = std::make_unique < char[]>(BUFFER_SIZE);
         if(Buffer == nullptr){
 			TRACE("Buffer is nullptr\n");
@@ -219,23 +224,128 @@ public:
         memset(Buffer.get(), 0, BUFFER_SIZE);
         
         size_t index = 0;
+        int consecutiveErrors = 0;
+        const int MAX_CONSECUTIVE_ERRORS = 5;
+        
         while (true) {
+            if (stopFlag && !stopFlag->load(std::memory_order_acquire)) {
+                delete[] Buffer.release();
+                return -1;
+            }
+            
+            // 检查缓冲区是否已满
+            if (index >= BUFFER_SIZE - 1) {
+                char dbg[256];
+                _snprintf_s(dbg, _countof(dbg), _TRUNCATE, "DealCommand: Buffer overflow! Index: %zu, Buffer size: %d\n", index, BUFFER_SIZE);
+                OutputDebugStringA(dbg);
+                delete[] Buffer.release();
+                return -3;
+            }
+            
+            if (timeoutMs >= 0) {
+                fd_set readSet;
+                FD_ZERO(&readSet);
+                FD_SET(m_serv, &readSet);
+                timeval tv;
+                tv.tv_sec = static_cast<long>(timeoutMs / 1000);
+                tv.tv_usec = static_cast<long>((timeoutMs % 1000) * 1000);
+                int ready = select(0, &readSet, NULL, NULL, &tv);
+                if (ready == 0) {
+                    continue;
+                }
+                if (ready == SOCKET_ERROR) {
+                    delete[] Buffer.release();
+                    return -1;
+                }
+            }
+            
             int len = recv(m_serv, Buffer.get() + index, BUFFER_SIZE - index, 0);
             if (len <= 0) {
+                if (len == 0) {
+                    // 连接关闭
+                    char dbg[256];
+                    _snprintf_s(dbg, _countof(dbg), _TRUNCATE, "DealCommand: Connection closed by peer\n");
+                    OutputDebugStringA(dbg);
+                } else {
+                    // 接收错误
+                    int error = WSAGetLastError();
+                    char dbg[256];
+                    _snprintf_s(dbg, _countof(dbg), _TRUNCATE, "DealCommand: recv error: %d\n", error);
+                    OutputDebugStringA(dbg);
+                    
+                    consecutiveErrors++;
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                        _snprintf_s(dbg, _countof(dbg), _TRUNCATE, "DealCommand: Too many consecutive errors, giving up\n");
+                        OutputDebugStringA(dbg);
+                        delete[] Buffer.release();
+                        return -1;
+                    }
+                    continue; // 继续尝试接收
+                }
 				delete[] Buffer.release();
                 return -1;
             }
+            
+            consecutiveErrors = 0; // 重置错误计数
             index += len;
-            len = index;
-            m_packet = Cpacket(reinterpret_cast<const BYTE*>(Buffer.get()), (size_t&)len);
-
-            if (len > 0) {
-                memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
-                index -= len;
-                delete[] Buffer.release();
-                return m_packet.sCmd;
+            
+            // 处理缓冲区中的数据包
+            size_t processed = 0;
+            while (processed < index) {
+                size_t remaining = index - processed;
+                size_t packetSize = remaining;
+                
+                // 尝试解析数据包
+                m_packet = Cpacket(reinterpret_cast<const BYTE*>(Buffer.get() + processed), packetSize);
+                
+                if (packetSize > 0) {
+                    // 成功解析数据包
+                    processed += packetSize;
+                    
+                    // If this is a screen data packet and a window is registered, post it asynchronously
+                    if (m_packet.sCmd == SCREEN_DATA_PACKET) {
+                        size_t dataLen = m_packet.strData.size();
+                        if (dataLen > 0) {
+                            char* pBuf = new char[dataLen];
+                            memcpy(pBuf, m_packet.strData.data(), dataLen);
+                            // Diagnostic: log reception and destination window
+                            char dbg[256];
+                            _snprintf_s(dbg, _countof(dbg), _TRUNCATE, "DealCommand: received SCREEN_DATA_PACKET size=%zu, hwnd=0x%p\n", dataLen, m_hScreenViewWnd);
+                            OutputDebugStringA(dbg);
+                            if (m_hScreenViewWnd && ::IsWindow(m_hScreenViewWnd)) {
+                                ::PostMessage(m_hScreenViewWnd, WM_USER + 200, (WPARAM)dataLen, (LPARAM)pBuf);
+                            } else {
+                                delete[] pBuf;
+                            }
+                        }
+                        // 继续处理下一个数据包
+                        continue;
+                    }
+                    
+                    // 普通命令：返回命令ID
+                    if (processed < index) {
+                        // 还有剩余数据，移动缓冲区
+                        memmove(Buffer.get(), Buffer.get() + processed, index - processed);
+                        index -= processed;
+                    } else {
+                        index = 0;
+                    }
+                    delete[] Buffer.release();
+                    return m_packet.sCmd;
+                } else {
+                    // 无法解析完整数据包，需要更多数据
+                    break;
+                }
+            }
+            
+            // 移动未处理的数据到缓冲区开头
+            if (processed > 0) {
+                memmove(Buffer.get(), Buffer.get() + processed, index - processed);
+                index -= processed;
             }
         }
+        
+        delete[] Buffer.release();
         return -1;
     }
 

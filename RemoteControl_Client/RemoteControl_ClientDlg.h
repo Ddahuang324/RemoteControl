@@ -6,6 +6,7 @@
 #include "clientSocket.h"
 #include "Enities.h"
 #include "include\\MultiThread\\ThreadPool.hpp"
+#include "ScreenViewDlg.h"
 
 // 前向声明
 class CDownloadProgressDlg;
@@ -71,6 +72,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnBnClickedBtnTest();
+	afx_msg void OnBnClickedBtnWatchScreen();
 	afx_msg void OnBnClickedButton2();
 	DWORD m_Serv_Address;
 	CString m_Port;

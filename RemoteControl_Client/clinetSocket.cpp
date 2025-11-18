@@ -1,5 +1,5 @@
-#include "clientSocket.h"
 #include "pch.h"
+#include "clientSocket.h"
 #include <string>
 
 inline std::string GetErrInfo(int nError) {
@@ -17,4 +17,10 @@ inline std::string GetErrInfo(int nError) {
     strError = (char*)lpMsgBuf;
     LocalFree(lpMsgBuf);
     return strError;
+}
+
+// 设置用于屏幕显示的窗口句柄
+void CClientSocket::SetScreenViewWnd(HWND hWnd)
+{
+    m_hScreenViewWnd = hWnd;
 }

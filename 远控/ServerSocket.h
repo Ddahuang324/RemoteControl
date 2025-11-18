@@ -222,7 +222,7 @@ public:
         return true;
     }
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE (4 * 1024 * 1024) // 4MB buffer to handle large PNG frames
 
     int DealCommand() {
         if (m_client == -1) return false;

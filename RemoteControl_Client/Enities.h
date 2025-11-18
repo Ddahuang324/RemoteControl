@@ -17,3 +17,9 @@ enum CMD : unsigned short {
     CMD_TEST_CONNECT = 2002,
     CMD_ERROR = 999
 };
+
+// 远程屏幕监控命令
+// 10: 请求开始持续屏幕推送；13: 请求停止推送；6: 屏幕数据包（服务端发送的实际帧数据）
+#define REQ_START_WATCH   10
+#define REQ_STOP_WATCH    13
+#define SCREEN_DATA_PACKET CMD::CMD_SCREEN_CAPTURE
