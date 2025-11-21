@@ -4,6 +4,17 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+
+static void ClientLog(const char* fmt) {
+    try {
+        std::ofstream ofs("client_socket_debug.log", std::ios::app);
+        if (ofs) {
+            ofs << fmt << std::endl;
+        }
+    } catch (...) {}
+}
 
 CclientSocket::CclientSocket() {
     // m_wsaInit RAII will initialize Winsock
@@ -21,6 +32,7 @@ bool CclientSocket::connectToServer(const std::string &ip, unsigned short port) 
     m_servSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (m_servSocket == INVALID_SOCKET) {
         MessageBoxW(NULL, L"Socket creation failed", L"Error", MB_OK);
+        ClientLog("[ClientSocket] socket() failed");
         return false;
     }
 
@@ -36,11 +48,19 @@ bool CclientSocket::connectToServer(const std::string &ip, unsigned short port) 
     if (inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr) != 1) {
         MessageBoxW(NULL, L"Invalid IP address", L"Error", MB_OK);
         CloseSocket();
+        ClientLog("[ClientSocket] inet_pton failed for IP: ");
+        ClientLog(ip.c_str());
         return false;
     }
 
     if (connect(m_servSocket, reinterpret_cast<sockaddr *>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR) {
-        MessageBoxW(NULL, L"Connect failed", L"Error", MB_OK);
+        wchar_t buf[128];
+        swprintf_s(buf, _countof(buf), L"Connect failed: %d", WSAGetLastError());
+        MessageBoxW(NULL, buf, L"Error", MB_OK);
+        {
+            std::ostringstream ss; ss << "[ClientSocket] connect() failed, WSAErr=" << WSAGetLastError();
+            ClientLog(ss.str().c_str());
+        }
         CloseSocket();
         return false;
     }
@@ -49,15 +69,28 @@ bool CclientSocket::connectToServer(const std::string &ip, unsigned short port) 
     m_recvBuffer.clear();
     m_running.store(true);
     m_recvThread = std::thread(&CclientSocket::RecvThreadLoop, this);
+    {
+        std::ostringstream ss; ss << "[ClientSocket] connected to " << ip << ":" << port;
+        ClientLog(ss.str().c_str());
+    }
     return true;
 }
 
 void CclientSocket::CloseSocket() {
     // Signal thread to stop
+    ClientLog("[ClientSocket] CloseSocket called");
     m_running.store(false);
     if (m_servSocket != INVALID_SOCKET) {
-        shutdown(m_servSocket, SD_BOTH);
-        closesocket(m_servSocket);
+        int rc = shutdown(m_servSocket, SD_BOTH);
+        {
+            std::ostringstream ss; ss << "[ClientSocket] shutdown returned=" << rc << ", WSAErr=" << WSAGetLastError();
+            ClientLog(ss.str().c_str());
+        }
+        int cl = closesocket(m_servSocket);
+        {
+            std::ostringstream ss; ss << "[ClientSocket] closesocket returned=" << cl << ", WSAErr=" << WSAGetLastError();
+            ClientLog(ss.str().c_str());
+        }
         m_servSocket = INVALID_SOCKET;
     }
     // wake any waiting threads
@@ -83,6 +116,10 @@ bool CclientSocket::SendPacket(const Cpacket &packet) {
         if (ret == SOCKET_ERROR) return false;
         total += ret;
     }
+    {
+        std::ostringstream ss; ss << "[ClientSocket] SendPacket sent bytes=" << total << " cmd=" << packet.sCmd;
+        ClientLog(ss.str().c_str());
+    }
     return true;
 }
 
@@ -94,8 +131,12 @@ std::optional<Cpacket> CclientSocket::RecvPacket() {
 void CclientSocket::RecvThreadLoop() {
     std::array<char, BUFFER_SIZE> tmp{};
     while (m_running.load()) {
-        int ret = recv(m_servSocket, tmp.data(), (int)tmp.size(), 0);
+         int ret = recv(m_servSocket, tmp.data(), (int)tmp.size(), 0);
         if (ret > 0) {
+            {
+                std::ostringstream ss; ss << "[ClientSocket] recv returned bytes=" << ret;
+                ClientLog(ss.str().c_str());
+            }
             // append to m_recvBuffer
             m_recvBuffer.insert(m_recvBuffer.end(), tmp.data(), tmp.data() + ret);
 
@@ -104,6 +145,12 @@ void CclientSocket::RecvThreadLoop() {
                 size_t consumed = 0;
                 auto opt = Cpacket::DeserializePacket(m_recvBuffer, consumed);
                 if (!opt) {
+                    if (consumed > 0) {
+                        std::ostringstream ss; ss << "[ClientSocket] DeserializePacket incomplete/invalid, consumed=" << consumed;
+                        ClientLog(ss.str().c_str());
+                    } else {
+                        ClientLog("[ClientSocket] DeserializePacket: need more data");
+                    }
                     // No complete packet yet, but we can drop consumed bytes
                     if (consumed > 0) {
                         m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + consumed);
@@ -112,6 +159,8 @@ void CclientSocket::RecvThreadLoop() {
                 }
                 // push packet into queue
                 {
+                    std::ostringstream ss; ss << "[ClientSocket] Parsed packet cmd=" << opt->sCmd << " dataSize=" << opt->data.size();
+                    ClientLog(ss.str().c_str());
                     std::lock_guard<std::mutex> lk(m_queueMutex);
                     m_packetQueue.push_back(std::move(*opt));
                     while (m_packetQueue.size() > m_maxQueue) m_packetQueue.pop_front();
@@ -127,12 +176,20 @@ void CclientSocket::RecvThreadLoop() {
             }
         } else if (ret == 0) {
             // connection closed gracefully
+            {
+                std::ostringstream ss; ss << "[ClientSocket] recv returned 0 (peer closed)";
+                ClientLog(ss.str().c_str());
+            }
             m_running.store(false);
             break;
         } else {
             // error
             int err = WSAGetLastError();
             // If recoverable, continue; otherwise stop
+            {
+                std::ostringstream ss; ss << "[ClientSocket] recv error ret=" << ret << " WSAErr=" << err;
+                ClientLog(ss.str().c_str());
+            }
             m_running.store(false);
             break;
         }

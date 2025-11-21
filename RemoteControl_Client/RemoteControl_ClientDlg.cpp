@@ -284,8 +284,15 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 				return;
 			}
 			std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
-			if (!recvPacket || recvPacket->sCmd != CMD::CMD_TEST_CONNECT) {
-				MessageBox(L"测试包响应失败！");
+			if (!recvPacket) {
+				MessageBox(L"测试包响应失败：未收到应答（超时或连接中断）");
+				m_clientSocket.CloseSocket();
+				return;
+			}
+			if (recvPacket->sCmd != CMD::CMD_TEST_CONNECT) {
+				wchar_t buf[128];
+				swprintf_s(buf, _countof(buf), L"测试包响应失败：收到命令 %u（期待 %u）", (unsigned int)recvPacket->sCmd, (unsigned int)CMD::CMD_TEST_CONNECT);
+				MessageBox(buf);
 				m_clientSocket.CloseSocket();
 				return;
 			} else {

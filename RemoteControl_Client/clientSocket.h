@@ -205,5 +205,7 @@ public:
     std::optional<Cpacket> GetLatestPacket();
     // Blocking retrieval of the next available packet from the receive queue.
     // timeoutMs: maximum wait in milliseconds (0 = wait indefinitely). Returns nullopt on timeout or socket closed.
-    std::optional<Cpacket> GetNextPacketBlocking(int timeoutMs = 5000);
+    // timeoutMs: maximum wait in milliseconds (0 = wait indefinitely).
+    // 默认稍微增大到15秒，排查网络延时/竞态问题时更稳妥。
+    std::optional<Cpacket> GetNextPacketBlocking(int timeoutMs = 15000);
 };

@@ -420,10 +420,12 @@ void CMonitorWnd::MonitorThreadFunc() {
     // 在收到服务端帧后，若远端分辨率与本地记录不一致，按远端分辨率创建画布（首帧/分辨率变更）
     {
       std::lock_guard<std::mutex> lock(m_canvasMutex);
-      if (w > 0 && h > 0 && (m_remoteCanvasW != w || m_remoteCanvasH != h)) {
+      // 仅在尚未初始化画布（首次接收）时创建画布。差异包使用局部 w/h
+      //（diffWidth/diffHeight），不应触发画布重建以保持合成效果。
+      if (w > 0 && h > 0 && (m_remoteCanvasW == 0 || m_remoteCanvasH == 0)) {
         if (m_canvas)
           m_canvas.Destroy();
-        // 创建与远端一致的画布用于合成和映射基准
+        // 创建与远端一致的画布用于合成和映射基准（首次帧应为全屏）
         m_canvas.Create(w, h, 24);
         m_remoteCanvasW = w;
         m_remoteCanvasH = h;

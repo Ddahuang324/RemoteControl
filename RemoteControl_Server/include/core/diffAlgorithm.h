@@ -716,8 +716,9 @@ inline std::vector<BYTE> GenerateScreenData(const CImage& screenImage, const std
 
     std::cout << "[GenerateScreenData] Calling DetectScreenDiff..." << std::endl;
 
-    // 使用稳定的自定义差异算法，避免竞争/计时引入的潜在未定义行为
-    auto [minX, minY, maxX, maxY] = DetectScreenDiffOpenCVRaw(prevPixels, currPixels, width, height);
+    // 使用兼顾 stride 的差异检测（会考虑 bytesPerPixel），以保持
+    // "差异比对 + 位置粘贴" 的合成视频效果
+    auto [minX, minY, maxX, maxY] = DetectScreenDiffCompetitive(prevPixels, currPixels, width, height, bytesPerPixel);
 
     std::cout << "[GenerateScreenData] DetectScreenDiff returned: minX=" << minX << " minY=" << minY 
               << " maxX=" << maxX << " maxY=" << maxY << std::endl;
