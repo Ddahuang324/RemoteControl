@@ -16,6 +16,7 @@
 #include <vector>       // 【新增】
 #include <cmath>        // 【新增】
 #include "MonitorWnd.h"
+#include <thread>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -35,8 +36,8 @@ void DownloadFileTask(DownloadParams params) {
     std::streamsize totalSize = params.fileSize;
     std::streamsize received = 0;
     size_t updateInterval = (totalSize <= 10LL * 1024 * 1024) ? 1024 * 1024 : 1024 * 10; // 小文件每1MB更新，中大每10KB
-    while (true) {
-        std::optional<Cpacket> recvPacket = pSocket->RecvPacket();
+	while (true) {
+		std::optional<Cpacket> recvPacket = pSocket->GetNextPacketBlocking();
         if (!recvPacket) {
             pProgressDlg->SetMessage(_T("接收数据失败"));
             pDlg->PostMessage(WM_CLOSE_PROGRESS, 0, (LPARAM)pProgressDlg);
@@ -147,6 +148,7 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_COMMAND(ID_OPEN_FILE, &CRemoteControlClientDlg::OnOpenFile)
 	ON_MESSAGE(WM_UPDATE_PROGRESS, &CRemoteControlClientDlg::OnUpdateProgress)
 	ON_MESSAGE(WM_CLOSE_PROGRESS, &CRemoteControlClientDlg::OnCloseProgress)
+	ON_MESSAGE(WM_CLIENT_DISCONNECTED, &CRemoteControlClientDlg::OnClientDisconnected)
 	ON_BN_CLICKED(IDC_BTN_START_MONITOR, &CRemoteControlClientDlg::OnBnClickedBtnStartMonitor)
 END_MESSAGE_MAP()
 
@@ -279,7 +281,7 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 				m_clientSocket.CloseSocket();
 				return;
 			}
-			std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+			std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 			if (!recvPacket || recvPacket->sCmd != CMD::CMD_TEST_CONNECT) {
 				MessageBox(L"测试包响应失败！");
 				m_clientSocket.CloseSocket();
@@ -293,11 +295,15 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 			MessageBox(L"连接失败！");
 		}
 	} else {
-		// 断开连接逻辑
-		m_clientSocket.CloseSocket();
-		m_bConnected = false;
-		m_btnConnect.SetWindowText(_T("连接"));
-		MessageBox(L"连接已断开！");
+		// 断开连接逻辑：在后台线程执行 CloseSocket，避免在 UI 线程阻塞
+		m_btnConnect.EnableWindow(FALSE);
+		m_btnConnect.SetWindowText(_T("断开中..."));
+		// 使用后台线程关闭 socket，完成后通过消息回到 UI 线程更新状态
+		std::thread([this]() {
+			m_clientSocket.CloseSocket();
+			// 通知主线程断开已完成
+			this->PostMessage(WM_CLIENT_DISCONNECTED, 0, 0);
+		}).detach();
 	}
 }
 
@@ -343,7 +349,7 @@ void CRemoteControlClientDlg::OnBnClickedButton2()
 	}
 
 	// 2. 接收响应
-	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+	std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 	if (!recvPacket || recvPacket->sCmd != CMD::CMD_DRIVER_INFO) {
 		MessageBox(_T("接收驱动器信息失败！"));
 		return;
@@ -452,7 +458,7 @@ void CRemoteControlClientDlg::OnDblclkTree3(NMHDR* pNMHDR, LRESULT* pResult)
 
 	// 2. 【核心重构】进入接收循环，处理流式包
 	while (true) {
-		std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+		std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 		if (!recvPacket) {
 			MessageBox(_T("接收数据失败！"));
 			break;
@@ -520,7 +526,7 @@ void CRemoteControlClientDlg::OnTvnSelchangedTree3(NMHDR* pNMHDR, LRESULT* pResu
 	// 2. 【核心重构】收集所有文件名（只收文件）
 	std::vector<CString> files;
 	while (true) {
-		std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+		std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 		if (!recvPacket) {
 			MessageBox(_T("接收数据失败！"));
 			break;
@@ -681,7 +687,7 @@ void CRemoteControlClientDlg::OnDownloadFile()
 	}
 
 	// 接收文件大小
-	std::optional<Cpacket> sizePacket = m_clientSocket.RecvPacket();
+	std::optional<Cpacket> sizePacket = m_clientSocket.GetNextPacketBlocking();
 	if (!sizePacket || sizePacket->sCmd != CMD::CMD_DOWNLOAD_FILE) {
 		MessageBox(_T("接收文件大小失败"));
 		return;
@@ -721,7 +727,7 @@ void CRemoteControlClientDlg::OnDeleteFile()
 		return;
 	}
 
-	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+	std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 	if (recvPacket && recvPacket->sCmd == CMD::CMD_DELETE_FILE) {
 		MessageBox(_T("文件删除成功"));
 		// 刷新列表
@@ -748,7 +754,7 @@ void CRemoteControlClientDlg::OnOpenFile()
 		return;
 	}
 
-	std::optional<Cpacket> recvPacket = m_clientSocket.RecvPacket();
+	std::optional<Cpacket> recvPacket = m_clientSocket.GetNextPacketBlocking();
 	if (recvPacket && recvPacket->sCmd == CMD::CMD_RUN_FILE) {
 		MessageBox(_T("文件打开成功"));
 	} else {
@@ -768,6 +774,16 @@ LRESULT CRemoteControlClientDlg::OnCloseProgress(WPARAM wParam, LPARAM lParam)
     pDlg->DestroyWindow();
     delete pDlg;
     return 0;
+}
+
+// 后台线程关闭 socket 后回到主线程的处理
+LRESULT CRemoteControlClientDlg::OnClientDisconnected(WPARAM wParam, LPARAM lParam)
+{
+	m_bConnected = false;
+	m_btnConnect.SetWindowText(_T("连接"));
+	m_btnConnect.EnableWindow(TRUE);
+	MessageBox(L"连接已断开！");
+	return 0;
 }
 
 // 启动监视窗口（可绑定到按钮的事件处理器）

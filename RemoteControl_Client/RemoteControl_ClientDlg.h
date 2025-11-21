@@ -18,6 +18,8 @@ class CMonitorWnd;
 // 定义自定义消息
 #define WM_UPDATE_PROGRESS (WM_USER + 1)
 #define WM_CLOSE_PROGRESS (WM_USER + 2)
+// 客户端断开连接通知（由后台线程发送到 UI 线程）
+#define WM_CLIENT_DISCONNECTED (WM_USER + 3)
 
 // 下载参数结构体
 struct DownloadParams {
@@ -104,5 +106,7 @@ protected:
 		afx_msg void OnOpenFile();
 		afx_msg LRESULT OnUpdateProgress(WPARAM wParam, LPARAM lParam);
 		afx_msg LRESULT OnCloseProgress(WPARAM wParam, LPARAM lParam);
+		// 后台断开连接完成后通知主线程更新 UI
+		afx_msg LRESULT OnClientDisconnected(WPARAM wParam, LPARAM lParam);
 		DECLARE_MESSAGE_MAP()
 };

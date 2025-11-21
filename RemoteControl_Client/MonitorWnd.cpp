@@ -7,6 +7,10 @@
 #include <atlstr.h>
 #include <algorithm>
 #include <cmath>
+// GDI+ 用于最近邻采样（避免缩放模糊）
+#include <gdiplus.h>
+using namespace Gdiplus;
+#pragma comment(lib, "gdiplus.lib")
 
 
 BEGIN_MESSAGE_MAP(CMonitorWnd, CWnd)
@@ -24,6 +28,13 @@ CMonitorWnd::~CMonitorWnd() {
 bool CMonitorWnd::CreateMonitorWindow(CWnd* pParent, CclientSocket* pSocket) {
     if (!pParent) return false;
     m_pSocket = pSocket;
+
+    // 确保 GDI+ 已初始化（用于使用最近邻插值绘制）
+    static ULONG_PTR s_gdiplusToken = 0;
+    if (s_gdiplusToken == 0) {
+        GdiplusStartupInput gdiplusStartupInput;
+        GdiplusStartup(&s_gdiplusToken, &gdiplusStartupInput, nullptr);
+    }
 
     // 注册并创建一个普通窗口用于显示画布
     LPCTSTR className = AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW, ::LoadCursor(nullptr, IDC_ARROW));
@@ -88,8 +99,54 @@ void CMonitorWnd::OnPaint() {
             int destLeft = (clientW - destW) / 2;
             int destTop = (clientH - destH) / 2;
 
-            // 在内存 DC 上绘制缩放后的画布
-            m_canvas.Draw(memDC.GetSafeHdc(), destLeft, destTop, destW, destH, 0, 0, canvasW, canvasH);
+            // 在内存 DC 上绘制缩放后的画布 — 使用 GDI+ 最近邻采样以避免模糊
+            bool drewWithGdiPlus = false;
+            HDC hCanvasDC = nullptr;
+            HBITMAP hTmpBmp = nullptr;
+            HDC hTempDC = nullptr;
+            HBITMAP hOldTmp = nullptr;
+            do {
+                // 获取 m_canvas 的 HDC
+                hCanvasDC = m_canvas.GetDC();
+                if (!hCanvasDC) break;
+
+                // 创建一个与画布同尺寸的兼容位图并把画布内容复制到该位图
+                hTempDC = CreateCompatibleDC(hCanvasDC);
+                if (!hTempDC) break;
+                hTmpBmp = CreateCompatibleBitmap(hCanvasDC, canvasW, canvasH);
+                if (!hTmpBmp) break;
+                hOldTmp = (HBITMAP)SelectObject(hTempDC, hTmpBmp);
+                if (!BitBlt(hTempDC, 0, 0, canvasW, canvasH, hCanvasDC, 0, 0, SRCCOPY)) break;
+
+                // 释放 m_canvas 的 DC（我们已经复制了像素）
+                m_canvas.ReleaseDC();
+                hCanvasDC = nullptr;
+
+                // 从 HBITMAP 构造 GDI+ Bitmap，然后使用最近邻采样绘制到 memDC
+                Bitmap* pGdiBitmap = Bitmap::FromHBITMAP(hTmpBmp, nullptr);
+                if (!pGdiBitmap) break;
+                {
+                    Graphics g(memDC.GetSafeHdc());
+                    g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+                    Rect destRect(destLeft, destTop, destW, destH);
+                    g.DrawImage(pGdiBitmap, destRect, 0, 0, canvasW, canvasH, UnitPixel);
+                }
+                delete pGdiBitmap;
+                drewWithGdiPlus = true;
+            } while (false);
+
+            // 清理临时 GDI 对象
+            if (hTempDC) {
+                if (hOldTmp) SelectObject(hTempDC, hOldTmp);
+                DeleteDC(hTempDC);
+            }
+            if (hTmpBmp) DeleteObject(hTmpBmp);
+            if (hCanvasDC) m_canvas.ReleaseDC();
+
+            // 如果 GDI+ 流程失败，回退到原来的 Draw 调用
+            if (!drewWithGdiPlus) {
+                m_canvas.Draw(memDC.GetSafeHdc(), destLeft, destTop, destW, destH, 0, 0, canvasW, canvasH);
+            }
         }
     }
 
@@ -113,7 +170,7 @@ void CMonitorWnd::MonitorThreadFunc() {
             continue;
         }
 
-        std::optional<Cpacket> resp = m_pSocket->RecvPacket();
+        std::optional<Cpacket> resp = m_pSocket->GetNextPacketBlocking(2000);
         if (!resp || resp->sCmd != CMD_SCREEN_CAPTURE) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;

@@ -11,12 +11,20 @@
 #include <ws2tcpip.h>
 #include <iostream>
 #include <iomanip>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <atomic>
 
 #pragma comment(lib, "ws2_32.lib")
 
 using BYTE = unsigned char;
 using WORD = unsigned short;
 using DWORD = unsigned long;
+
+// Maximum allowed single packet body (data + cmd + checksum). Protect against huge/poisoned length fields.
+constexpr size_t MAX_PACKET_BODY = 10 * 1024 * 1024; // 10 MB
 
 // --- 1. Copied from ServerSocket.h for Cpacket and WSAInitializer ---
 // (Ensure client and server use the same definitions)
@@ -26,6 +34,10 @@ public:
     Cpacket() : sHead(0), nLength(0), sCmd(0), sSum(0) {}
 
     Cpacket(WORD cmd, const std::vector<BYTE>& packetData) : sHead(0xFEFF), sCmd(cmd), data(packetData), sSum(0) {
+        nLength = sizeof(sCmd) + data.size() + sizeof(sSum);
+    }
+    // Move-constructor for packet data to avoid copy when possible
+    Cpacket(WORD cmd, std::vector<BYTE>&& packetData) : sHead(0xFEFF), sCmd(cmd), data(std::move(packetData)), sSum(0) {
         nLength = sizeof(sCmd) + data.size() + sizeof(sSum);
     }
     WORD sHead; // Packet header, fixed to 0xFEFF
@@ -73,7 +85,14 @@ public:
         packet.sCmd = *reinterpret_cast<const WORD*>(&buffer[currentPos]);
         currentPos += sizeof(WORD);
 
+        // Validate declared length: must be at least size of cmd + checksum and not exceed MAX_PACKET_BODY
         if (packet.nLength < (sizeof(sCmd) + sizeof(sSum))) {
+            bytesconsumed += sizeof(WORD);
+            return std::nullopt;
+        }
+
+        if (packet.nLength > MAX_PACKET_BODY) {
+            // Declared length too large — skip header byte and continue scanning
             bytesconsumed += sizeof(WORD);
             return std::nullopt;
         }
@@ -112,16 +131,23 @@ public:
 
     // Serialize current Cpacket to byte stream
     std::vector<BYTE> SerializePacket() const {
-        std::vector<BYTE> buffer;
         WORD calculatedSum = 0;
         if (!data.empty()) {
             calculatedSum = std::accumulate(data.begin(), data.end(), static_cast<WORD>(0));
         }
-        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&sHead), reinterpret_cast<const BYTE*>(&sHead) + sizeof(sHead));
-        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&nLength), reinterpret_cast<const BYTE*>(&nLength) + sizeof(nLength));
-        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&sCmd), reinterpret_cast<const BYTE*>(&sCmd) + sizeof(sCmd));
-        buffer.insert(buffer.end(), data.begin(), data.end());
-        buffer.insert(buffer.end(), reinterpret_cast<const BYTE*>(&calculatedSum), reinterpret_cast<const BYTE*>(&calculatedSum) + sizeof(calculatedSum));
+
+        // Reserve exact size and fill buffer to avoid multiple realloc/copies
+        size_t totalSize = sizeof(sHead) + sizeof(nLength) + sizeof(sCmd) + data.size() + sizeof(calculatedSum);
+        std::vector<BYTE> buffer;
+        buffer.resize(totalSize);
+        size_t pos = 0;
+        memcpy(buffer.data() + pos, &sHead, sizeof(sHead)); pos += sizeof(sHead);
+        memcpy(buffer.data() + pos, &nLength, sizeof(nLength)); pos += sizeof(nLength);
+        memcpy(buffer.data() + pos, &sCmd, sizeof(sCmd)); pos += sizeof(sCmd);
+        if (!data.empty()) {
+            memcpy(buffer.data() + pos, data.data(), data.size()); pos += data.size();
+        }
+        memcpy(buffer.data() + pos, &calculatedSum, sizeof(calculatedSum)); pos += sizeof(calculatedSum);
         return buffer;
     }
 };
@@ -162,4 +188,22 @@ private:
     SOCKET m_servSocket = INVALID_SOCKET;
     std::vector<BYTE> m_recvBuffer; // Receive buffer for handling TCP stream
     static constexpr size_t BUFFER_SIZE = 4096;
+    static constexpr size_t MAX_TOTAL_BUFFER = 20 * 1024 * 1024; // 20 MB total buffered data cap
+    // Threading + queue for decoupling network receive and UI rendering
+    std::thread m_recvThread;
+    std::mutex m_queueMutex;
+    std::condition_variable m_queueCv;
+    std::deque<Cpacket> m_packetQueue;
+    std::atomic_bool m_running{false};
+    size_t m_maxQueue = 3; // keep only latest few frames
+
+private:
+    void RecvThreadLoop();
+
+public:
+    // Non-blocking retrieval of the latest received packet (drops older frames)
+    std::optional<Cpacket> GetLatestPacket();
+    // Blocking retrieval of the next available packet from the receive queue.
+    // timeoutMs: maximum wait in milliseconds (0 = wait indefinitely). Returns nullopt on timeout or socket closed.
+    std::optional<Cpacket> GetNextPacketBlocking(int timeoutMs = 5000);
 };
