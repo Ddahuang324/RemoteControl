@@ -20,6 +20,10 @@ class CMonitorWnd;
 #define WM_CLOSE_PROGRESS (WM_USER + 2)
 // 客户端断开连接通知（由后台线程发送到 UI 线程）
 #define WM_CLIENT_DISCONNECTED (WM_USER + 3)
+// 监视停止通知（由后台线程发送到 UI 线程）
+#define WM_CLIENT_MONITOR_STOPPED (WM_USER + 4)
+// 通知主线程销毁并删除监视窗口对象（LPARAM = CMonitorWnd*）
+#define WM_CLIENT_MONITOR_DESTROY (WM_USER + 5)
 
 // 下载参数结构体
 struct DownloadParams {
@@ -74,6 +78,9 @@ protected:
 		// 屏幕监视按钮（由资源定义）
 		CButton m_btnStartMonitor;
 
+		// 活动的监视窗口指针（若为空表示未启动监视）
+		CMonitorWnd* m_pMonitorWnd = nullptr;
+
 		CString m_strServerIP = L"127.0.0.1"; // 当前服务器IP
 		int m_nServerPort = 9527; // 当前服务器端口，默认9527
 
@@ -108,5 +115,8 @@ protected:
 		afx_msg LRESULT OnCloseProgress(WPARAM wParam, LPARAM lParam);
 		// 后台断开连接完成后通知主线程更新 UI
 		afx_msg LRESULT OnClientDisconnected(WPARAM wParam, LPARAM lParam);
+		afx_msg LRESULT OnMonitorStopped(WPARAM wParam, LPARAM lParam);
+		// 在 UI 线程收到请求后销毁监视窗口对象
+		afx_msg LRESULT OnMonitorDestroyPosted(WPARAM wParam, LPARAM lParam);
 		DECLARE_MESSAGE_MAP()
 };

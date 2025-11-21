@@ -149,6 +149,8 @@ BEGIN_MESSAGE_MAP(CRemoteControlClientDlg, CDialogEx)
 	ON_MESSAGE(WM_UPDATE_PROGRESS, &CRemoteControlClientDlg::OnUpdateProgress)
 	ON_MESSAGE(WM_CLOSE_PROGRESS, &CRemoteControlClientDlg::OnCloseProgress)
 	ON_MESSAGE(WM_CLIENT_DISCONNECTED, &CRemoteControlClientDlg::OnClientDisconnected)
+	ON_MESSAGE(WM_CLIENT_MONITOR_STOPPED, &CRemoteControlClientDlg::OnMonitorStopped)
+	ON_MESSAGE(WM_CLIENT_MONITOR_DESTROY, &CRemoteControlClientDlg::OnMonitorDestroyPosted)
 	ON_BN_CLICKED(IDC_BTN_START_MONITOR, &CRemoteControlClientDlg::OnBnClickedBtnStartMonitor)
 END_MESSAGE_MAP()
 
@@ -298,6 +300,16 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 		// 断开连接逻辑：在后台线程执行 CloseSocket，避免在 UI 线程阻塞
 		m_btnConnect.EnableWindow(FALSE);
 		m_btnConnect.SetWindowText(_T("断开中..."));
+		// 如果监视窗口存在，先安全停止监视，避免后台线程仍在使用 socket
+		if (m_pMonitorWnd) {
+			CMonitorWnd* pToStop = m_pMonitorWnd;
+			m_pMonitorWnd = nullptr;
+			std::thread([this, pToStop]() {
+				pToStop->StopMonitor();
+				this->PostMessage(WM_CLIENT_MONITOR_DESTROY, 0, (LPARAM)pToStop);
+			}).detach();
+		}
+
 		// 使用后台线程关闭 socket，完成后通过消息回到 UI 线程更新状态
 		std::thread([this]() {
 			m_clientSocket.CloseSocket();
@@ -657,7 +669,29 @@ void CRemoteControlClientDlg::OnNMRClickList4(NMHDR* pNMHDR, LRESULT* pResult)
 
 void CRemoteControlClientDlg::OnBnClickedBtnStartMonitor()
 {
-	StartMonitor();
+	// 切换监视：如果未创建监视窗口则启动，否则安全停止并销毁
+	if (m_pMonitorWnd == nullptr) {
+		StartMonitor();
+	} else {
+		// 在后台线程停止监视，避免阻塞 UI（StopMonitor 可能等待接收超时）
+		m_btnStartMonitor.EnableWindow(FALSE);
+		m_btnStartMonitor.SetWindowText(_T("停止中..."));
+
+		// 将指针捕获到局部变量，在后台线程中关闭并删除
+		CMonitorWnd* pToStop = m_pMonitorWnd;
+		m_pMonitorWnd = nullptr; // 立即置空，避免 UI 线程再次操作
+
+		std::thread([this, pToStop]() mutable {
+			if (pToStop) {
+				// 停止其内部监视线程并等待退出
+				pToStop->StopMonitor();
+				// 使用 PostMessage 到 UI 线程做 DestroyWindow 更稳妥
+				this->PostMessage(WM_CLIENT_MONITOR_DESTROY, 0, (LPARAM)pToStop);
+			}
+			// 通知 UI 线程，监视已停止（重新启用按钮等）
+			this->PostMessage(WM_CLIENT_MONITOR_STOPPED, 0, 0);
+		}).detach();
+	}
 }
 
 void CRemoteControlClientDlg::OnDownloadFile()
@@ -786,6 +820,14 @@ LRESULT CRemoteControlClientDlg::OnClientDisconnected(WPARAM wParam, LPARAM lPar
 	return 0;
 }
 
+LRESULT CRemoteControlClientDlg::OnMonitorStopped(WPARAM wParam, LPARAM lParam)
+{
+    // UI 线程恢复监视按钮状态
+    m_btnStartMonitor.SetWindowText(_T("开始监视"));
+    m_btnStartMonitor.EnableWindow(TRUE);
+    return 0;
+}
+
 // 启动监视窗口（可绑定到按钮的事件处理器）
 void CRemoteControlClientDlg::StartMonitor()
 {
@@ -794,11 +836,32 @@ void CRemoteControlClientDlg::StartMonitor()
 		return;
 	}
 
-	CMonitorWnd* pMonitor = new CMonitorWnd();
-	if (!pMonitor->CreateMonitorWindow(this, &m_clientSocket)) {
-		MessageBox(_T("创建监视窗口失败"));
-		delete pMonitor;
+	if (m_pMonitorWnd != nullptr) {
+		// 已经存在监视窗口，尝试置前
+		if (::IsWindow(m_pMonitorWnd->GetSafeHwnd())) {
+			::SetForegroundWindow(m_pMonitorWnd->GetSafeHwnd());
+		}
 		return;
 	}
-	pMonitor->ShowWindow(SW_SHOW);
+
+	m_pMonitorWnd = new CMonitorWnd();
+	if (!m_pMonitorWnd->CreateMonitorWindow(this, &m_clientSocket)) {
+		MessageBox(_T("创建监视窗口失败"));
+		delete m_pMonitorWnd;
+		m_pMonitorWnd = nullptr;
+		return;
+	}
+	m_pMonitorWnd->ShowWindow(SW_SHOW);
+}
+
+LRESULT CRemoteControlClientDlg::OnMonitorDestroyPosted(WPARAM wParam, LPARAM lParam)
+{
+	CMonitorWnd* pWnd = (CMonitorWnd*)lParam;
+	if (pWnd) {
+		if (::IsWindow(pWnd->GetSafeHwnd())) {
+			pWnd->DestroyWindow();
+		}
+		delete pWnd;
+	}
+	return 0;
 }
