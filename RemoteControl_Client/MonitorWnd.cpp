@@ -71,12 +71,54 @@ bool CMonitorWnd::CreateMonitorWindow(CWnd *pParent, CclientSocket *pSocket) {
 // 简单的按钮事件处理：更新鼠标控制状态
 void CMonitorWnd::OnBnClickedBtnLock()
 {
+  // 发送锁机命令到服务端
+  if (m_pSocket) {
+    try {
+      Cpacket pkt(CMD_LOCK_MACHINE, {});
+      m_pSocket->SendPacket(pkt);
+    } catch (...) {
+      // 忽略发送错误
+    }
+  }
+
+  // 更新本地状态：禁止鼠标控制并更新 UI
   m_bMouseControlEnabled = false;
+  CWnd *pLock = GetDlgItem(IDC_BTN_LOCK);
+  CWnd *pUnlock = GetDlgItem(IDC_BTN_UNLOCK);
+  if (pLock)
+    pLock->EnableWindow(FALSE);
+  if (pUnlock)
+    pUnlock->EnableWindow(TRUE);
+  CButton* pChk = (CButton*)GetDlgItem(IDC_CHECK_MOUSE_CONTROL);
+  if (pChk) {
+    pChk->SetCheck(BST_UNCHECKED);
+  }
 }
 
 void CMonitorWnd::OnBnClickedBtnUnlock()
 {
+  // 发送解锁命令到服务端
+  if (m_pSocket) {
+    try {
+      Cpacket pkt(CMD_UNLOCK_MACHINE, {});
+      m_pSocket->SendPacket(pkt);
+    } catch (...) {
+      // 忽略发送错误
+    }
+  }
+
+  // 更新本地状态：允许鼠标控制并更新 UI
   m_bMouseControlEnabled = true;
+  CWnd *pLock = GetDlgItem(IDC_BTN_LOCK);
+  CWnd *pUnlock = GetDlgItem(IDC_BTN_UNLOCK);
+  if (pLock)
+    pLock->EnableWindow(TRUE);
+  if (pUnlock)
+    pUnlock->EnableWindow(FALSE);
+  CButton* pChk = (CButton*)GetDlgItem(IDC_CHECK_MOUSE_CONTROL);
+  if (pChk) {
+    pChk->SetCheck(BST_CHECKED);
+  }
 }
 
 void CMonitorWnd::OnBnClickedCheckMouseControl()
@@ -181,6 +223,18 @@ void CMonitorWnd::DoDataExchange(CDataExchange *pDX) {
 
 BOOL CMonitorWnd::OnInitDialog() {
   BOOL ok = CDialog::OnInitDialog();
+  // 初始 UI 状态：默认未允许鼠标控制
+  CButton* pChk = (CButton*)GetDlgItem(IDC_CHECK_MOUSE_CONTROL);
+  if (pChk) {
+    pChk->SetCheck(m_bMouseControlEnabled ? BST_CHECKED : BST_UNCHECKED);
+  }
+  CWnd *pLock = GetDlgItem(IDC_BTN_LOCK);
+  CWnd *pUnlock = GetDlgItem(IDC_BTN_UNLOCK);
+  if (pLock)
+    pLock->EnableWindow(TRUE);
+  if (pUnlock)
+    pUnlock->EnableWindow(FALSE);
+
   return ok;
 }
 
@@ -358,9 +412,11 @@ void CMonitorWnd::MonitorThreadFunc() {
   if (!m_pSocket)
     return;
 
+  bool firstRequest = true;
   while (m_bIsMonitoring) {
-    // 发送截屏请求
-    Cpacket req(CMD_SCREEN_CAPTURE, {});
+    // 发送截屏请求。首次请求带标志位要求服务端强制发送全屏帧（避免服务端只回传 diff）。
+    Cpacket req = (firstRequest ? Cpacket(CMD_SCREEN_CAPTURE, std::vector<BYTE>{1}) : Cpacket(CMD_SCREEN_CAPTURE, {}));
+    firstRequest = false;
     if (!m_pSocket->SendPacket(req)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
       continue;
@@ -418,11 +474,14 @@ void CMonitorWnd::MonitorThreadFunc() {
     }
 
     // 在收到服务端帧后，若远端分辨率与本地记录不一致，按远端分辨率创建画布（首帧/分辨率变更）
+    // 仅当该数据包为“全屏”包（x==0 && y==0）时，才用包头的 w/h 来创建画布。
+    // 这避免了在重启/重新打开监视窗口时误将差异包的小尺寸当作远端全屏尺寸来初始化画布，
+    // 导致只能显示部分屏幕内容的问题。
     {
       std::lock_guard<std::mutex> lock(m_canvasMutex);
       // 仅在尚未初始化画布（首次接收）时创建画布。差异包使用局部 w/h
       //（diffWidth/diffHeight），不应触发画布重建以保持合成效果。
-      if (w > 0 && h > 0 && (m_remoteCanvasW == 0 || m_remoteCanvasH == 0)) {
+      if (w > 0 && h > 0 && x == 0 && y == 0 && (m_remoteCanvasW == 0 || m_remoteCanvasH == 0)) {
         if (m_canvas)
           m_canvas.Destroy();
         // 创建与远端一致的画布用于合成和映射基准（首次帧应为全屏）
@@ -431,11 +490,17 @@ void CMonitorWnd::MonitorThreadFunc() {
         m_remoteCanvasH = h;
       }
 
-      // 合成到画布
-      HDC hCanvasDC = m_canvas.GetDC();
-      if (hCanvasDC) {
-        diffImg.Draw(hCanvasDC, x, y, w, h, 0, 0, w, h);
-        m_canvas.ReleaseDC();
+      // 合成到画布（仅当画布已初始化时）
+      if (m_remoteCanvasW > 0 && m_remoteCanvasH > 0) {
+        HDC hCanvasDC = m_canvas.GetDC();
+        if (hCanvasDC) {
+          diffImg.Draw(hCanvasDC, x, y, w, h, 0, 0, w, h);
+          m_canvas.ReleaseDC();
+        }
+      } else {
+        // 如果画布尚未初始化且收到的是 diff 包（非全屏），跳过合成以避免对无效目标执行 Draw。
+        // 日志仅为调试用途
+        std::cout << "MonitorWnd: received diff before canvas initialization, skipping compose (x=" << x << ", y=" << y << ")" << std::endl;
       }
     }
 

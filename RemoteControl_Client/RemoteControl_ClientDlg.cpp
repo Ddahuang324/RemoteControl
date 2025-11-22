@@ -313,6 +313,9 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 			m_pMonitorWnd = nullptr;
 			std::thread([this, pToStop]() {
 				pToStop->StopMonitor();
+				// 停止监视后清理接收队列中遗留的屏幕帧和底层未解析字节，避免下次启动被旧帧影响
+				this->m_clientSocket.ClearPacketsByCmd(static_cast<WORD>(CMD::CMD_SCREEN_CAPTURE));
+				this->m_clientSocket.ClearRecvBuffer();
 				this->PostMessage(WM_CLIENT_MONITOR_DESTROY, 0, (LPARAM)pToStop);
 			}).detach();
 		}
@@ -692,6 +695,9 @@ void CRemoteControlClientDlg::OnBnClickedBtnStartMonitor()
 			if (pToStop) {
 				// 停止其内部监视线程并等待退出
 				pToStop->StopMonitor();
+				// 停止监视并清理遗留帧与底层缓冲，避免下次启动显示旧数据
+				this->m_clientSocket.ClearPacketsByCmd(static_cast<WORD>(CMD::CMD_SCREEN_CAPTURE));
+				this->m_clientSocket.ClearRecvBuffer();
 				// 使用 PostMessage 到 UI 线程做 DestroyWindow 更稳妥
 				this->PostMessage(WM_CLIENT_MONITOR_DESTROY, 0, (LPARAM)pToStop);
 			}

@@ -137,42 +137,56 @@ void CclientSocket::RecvThreadLoop() {
                 std::ostringstream ss; ss << "[ClientSocket] recv returned bytes=" << ret;
                 ClientLog(ss.str().c_str());
             }
-            // append to m_recvBuffer
-            m_recvBuffer.insert(m_recvBuffer.end(), tmp.data(), tmp.data() + ret);
+            // append to m_recvBuffer (protected)
+            {
+                std::lock_guard<std::mutex> rb_lk(m_recvBufferMutex);
+                m_recvBuffer.insert(m_recvBuffer.end(), tmp.data(), tmp.data() + ret);
+            }
 
-            // try to parse packets
+            // try to parse packets; coordinate via m_recvBufferMutex to allow safe clearing
             while (true) {
+                // parse while holding recv buffer lock only for reading/erasing
+                std::unique_lock<std::mutex> rb_lk(m_recvBufferMutex);
                 size_t consumed = 0;
                 auto opt = Cpacket::DeserializePacket(m_recvBuffer, consumed);
                 if (!opt) {
                     if (consumed > 0) {
                         std::ostringstream ss; ss << "[ClientSocket] DeserializePacket incomplete/invalid, consumed=" << consumed;
                         ClientLog(ss.str().c_str());
+                        // drop consumed bytes
+                        if (consumed <= m_recvBuffer.size())
+                            m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + consumed);
+                        else
+                            m_recvBuffer.clear();
                     } else {
                         ClientLog("[ClientSocket] DeserializePacket: need more data");
                     }
-                    // No complete packet yet, but we can drop consumed bytes
-                    if (consumed > 0) {
-                        m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + consumed);
-                    }
+                    // release lock and wait for more data
+                    rb_lk.unlock();
                     break;
                 }
-                // push packet into queue
-                {
-                    std::ostringstream ss; ss << "[ClientSocket] Parsed packet cmd=" << opt->sCmd << " dataSize=" << opt->data.size();
-                    ClientLog(ss.str().c_str());
-                    std::lock_guard<std::mutex> lk(m_queueMutex);
-                    m_packetQueue.push_back(std::move(*opt));
-                    while (m_packetQueue.size() > m_maxQueue) m_packetQueue.pop_front();
-                }
-                m_queueCv.notify_one();
-                // remove consumed bytes
+
+                // We have a complete packet. Move it out and remove consumed bytes while holding the recv lock.
+                Cpacket pkt = std::move(*opt);
                 if (consumed > 0) {
                     if (consumed <= m_recvBuffer.size())
                         m_recvBuffer.erase(m_recvBuffer.begin(), m_recvBuffer.begin() + consumed);
                     else
                         m_recvBuffer.clear();
                 }
+                // release recv buffer lock before pushing into packet queue to avoid lock ordering deadlocks
+                rb_lk.unlock();
+
+                // push packet into queue
+                {
+                    std::ostringstream ss; ss << "[ClientSocket] Parsed packet cmd=" << pkt.sCmd << " dataSize=" << pkt.data.size();
+                    ClientLog(ss.str().c_str());
+                    std::lock_guard<std::mutex> lk(m_queueMutex);
+                    m_packetQueue.push_back(std::move(pkt));
+                    while (m_packetQueue.size() > m_maxQueue) m_packetQueue.pop_front();
+                }
+                m_queueCv.notify_one();
+                // continue to parse more packets (will re-acquire rb_lk at loop top)
             }
         } else if (ret == 0) {
             // connection closed gracefully
@@ -220,4 +234,25 @@ std::optional<Cpacket> CclientSocket::GetNextPacketBlocking(int timeoutMs) {
     Cpacket pkt = std::move(m_packetQueue.front());
     m_packetQueue.pop_front();
     return pkt;
+}
+
+void CclientSocket::ClearPacketsByCmd(WORD cmd) {
+    std::lock_guard<std::mutex> lk(m_queueMutex);
+    if (m_packetQueue.empty()) return;
+    std::deque<Cpacket> newq;
+    newq.clear();
+    for (auto &p : m_packetQueue) {
+        if (p.sCmd != cmd) newq.push_back(std::move(p));
+    }
+    m_packetQueue.swap(newq);
+}
+
+void CclientSocket::ClearAllPackets() {
+    std::lock_guard<std::mutex> lk(m_queueMutex);
+    m_packetQueue.clear();
+}
+
+void CclientSocket::ClearRecvBuffer() {
+    std::lock_guard<std::mutex> rb_lk(m_recvBufferMutex);
+    m_recvBuffer.clear();
 }

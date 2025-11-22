@@ -191,6 +191,7 @@ private:
     static constexpr size_t MAX_TOTAL_BUFFER = 20 * 1024 * 1024; // 20 MB total buffered data cap
     // Threading + queue for decoupling network receive and UI rendering
     std::thread m_recvThread;
+    std::mutex m_recvBufferMutex;
     std::mutex m_queueMutex;
     std::condition_variable m_queueCv;
     std::deque<Cpacket> m_packetQueue;
@@ -208,4 +209,10 @@ public:
     // timeoutMs: maximum wait in milliseconds (0 = wait indefinitely).
     // 默认稍微增大到15秒，排查网络延时/竞态问题时更稳妥。
     std::optional<Cpacket> GetNextPacketBlocking(int timeoutMs = 15000);
+    // 清空底层接收缓冲（未解析的 TCP 字节），线程安全
+    void ClearRecvBuffer();
+    // 清理接收队列中指定命令的包（线程安全）
+    void ClearPacketsByCmd(WORD cmd);
+    // 清空所有已缓存的包（线程安全）
+    void ClearAllPackets();
 };

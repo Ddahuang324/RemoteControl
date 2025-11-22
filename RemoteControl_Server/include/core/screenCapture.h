@@ -263,6 +263,16 @@ public:
   void CaptureAndSend(CServerSocket &ClientSocket, const Cpacket &packet) {
     std::lock_guard<std::mutex> lk(m_mutex);
     try {
+      // 如果客户端在请求中传入非空 data 且首字节为 1，则表示请求强制发送全屏。
+      // 通过清空 m_previousFramePixels 来强制下一帧作为全屏帧发送。
+      if (!packet.data.empty()) {
+        if (packet.data.size() >= 1 && packet.data[0] == 1) {
+          std::cout << "CaptureAndSend: client requested forced full-frame. Clearing previous frame cache." << std::endl;
+          m_previousFramePixels.clear();
+          m_prevWidth = 0;
+          m_prevHeight = 0;
+        }
+      }
       auto [ScreenImagePtr, bitsPtr, nWidth, nHeight, nBitperPixel] =
           CaptureScreenImage();
       auto &ScreenImage = *ScreenImagePtr;
