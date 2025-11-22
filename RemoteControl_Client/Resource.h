@@ -26,6 +26,13 @@
 #define IDD_DIALOG_SCREEN_VIEW          131
 #define IDC_STATIC_SCREEN               1012
 
+// Monitor dialog and controls
+#define IDD_MONITOR_DIALOG              132
+#define IDC_STATIC_MONITOR              1013
+#define IDC_CHECK_MOUSE_CONTROL         1014
+#define IDC_BTN_LOCK                    1015
+#define IDC_BTN_UNLOCK                  1016
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
@@ -33,7 +40,7 @@
 #define IDC_BTN_WATCH_SCREEN            1011
 #define IDD_DIALOG_SCREEN_VIEW          131
 #define IDC_STATIC_SCREEN               1012
-#define _APS_NEXT_RESOURCE_VALUE        132
+#define _APS_NEXT_RESOURCE_VALUE        133
 #define _APS_NEXT_COMMAND_VALUE         32771
 #define _APS_NEXT_CONTROL_VALUE         1013
 #define _APS_NEXT_SYMED_VALUE           101

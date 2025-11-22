@@ -10,6 +10,7 @@
 
 // 前向声明
 class CDownloadProgressDlg;
+class CMonitorWnd;
 
 // 定义自定义消息
 #define WM_UPDATE_PROGRESS (WM_USER + 1)
@@ -55,6 +56,11 @@ protected:
 
 	// UI 控件
 	CButton m_btnConnect; // IDC_BTN_TEST
+	CButton m_btnWatchScreen; // IDC_BTN_WATCH_SCREEN
+	CMonitorWnd* m_pMonitorWnd = nullptr;
+
+	// monitoring state
+	bool m_bIsMonitoring = false;
 
 	// 状态
 	CString m_strCurrentDirPath;

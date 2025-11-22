@@ -190,6 +190,7 @@
     <ClInclude Include="RemoteControl_ClientDlg.h" />
     <ClInclude Include="ScreenViewDlg.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="MonitorWnd.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="include\MultiThread\ThreadPool.hpp" />
     <ClInclude Include="DownloadProgressDlg.h" />
@@ -206,6 +207,7 @@
     <ClCompile Include="RemoteControl_ClientDlg.cpp" />
     <ClCompile Include="DownloadProgressDlg.cpp" />
     <ClCompile Include="ScreenViewDlg.cpp" />
+    <ClCompile Include="MonitorWnd.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RemoteControlClient.rc" />

@@ -226,38 +226,45 @@ public:
 
     int DealCommand() {
         if (m_client == -1) return false;
-        //char Buffer[1024] = " ";
-		auto Buffer = std::make_unique < char[]> (BUFFER_SIZE);
-        if(Buffer == nullptr){
+        auto Buffer = std::make_unique<char[]>(BUFFER_SIZE);
+        if (Buffer == nullptr) {
             TRACE("Buffer is nullptr\n");
             return -2;
         }
-		memset(Buffer.get(), 0, BUFFER_SIZE);
+        memset(Buffer.get(), 0, BUFFER_SIZE);
         size_t index = 0;
         while (true) {
-            int len = recv(m_client, Buffer.get() + index, BUFFER_SIZE - index, 0);
-            if (len <= 0) {
-                printf("[ServerSocket] recv returned %d (client disconnected or error)\n", len);
+            int recvLen = recv(m_client, Buffer.get() + index, (int)(BUFFER_SIZE - index), 0);
+            if (recvLen <= 0) {
+                printf("[ServerSocket] recv returned %d (client disconnected or error)\n", recvLen);
                 fflush(stdout);
-                delete[] Buffer.release();
                 return -1;
             }
-			index += len;
-			len = index;
-			m_packet = Cpacket (reinterpret_cast<const BYTE*>(Buffer.get()), (size_t&)len);
-             
-            if (len > 0) {
+            index += (size_t)recvLen;
+
+            // 使用 size_t 变量传递给 Cpacket，避免将 int 的引用强制转换为 size_t& 导致栈损坏
+            size_t parsedSize = index;
+            m_packet = Cpacket(reinterpret_cast<const BYTE*>(Buffer.get()), parsedSize);
+
+            if (parsedSize > 0) {
                 // 已成功解析出一个完整报文
                 printf("[ServerSocket] parsed packet, cmd=%u\n", (unsigned)m_packet.sCmd);
                 fflush(stdout);
-                memmove(Buffer.get(), Buffer.get() + len, BUFFER_SIZE - len);
-                index -= len;
-                delete[] Buffer.release();
+                memmove(Buffer.get(), Buffer.get() + parsedSize, BUFFER_SIZE - parsedSize);
+                index -= parsedSize;
                 return m_packet.sCmd;
             }
-        } 
-        delete[] Buffer.release();
-		return -1;
+            // 继续接收剩余数据
+            if (index >= BUFFER_SIZE) {
+                // 缓冲区已满但仍未解析出完整包，认为协议或数据有误，重置缓冲区以防死循环
+                printf("[ServerSocket] buffer overflow or malformed packet (index=%zu), resetting buffer\n", index);
+                fflush(stdout);
+                memset(Buffer.get(), 0, BUFFER_SIZE);
+                index = 0;
+                return -1;
+            }
+        }
+        return -1;
     }
 
     bool Send(const void* pData, size_t size) {

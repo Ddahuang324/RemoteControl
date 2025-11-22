@@ -8,6 +8,7 @@
 #include "afxdialogex.h"
 #include "resource.h"
 #include "DownloadProgressDlg.h"
+#include "MonitorWnd.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -79,6 +80,7 @@ void CRemoteControlClientDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_TREE3, m_Tree);
 	DDX_Control(pDX, IDC_LIST4, m_List);
 	DDX_Control(pDX, IDC_BTN_TEST, m_btnConnect);
+	DDX_Control(pDX, IDC_BTN_WATCH_SCREEN, m_btnWatchScreen);
 }
 
 
@@ -267,9 +269,36 @@ void CRemoteControlClientDlg::OnBnClickedBtnTest()
 
 void CRemoteControlClientDlg::OnBnClickedBtnWatchScreen()
 {
-	// 打开屏幕查看对话框（传入 socket 实例指针）
-	CScreenViewDlg dlg(&m_client, this);
-	dlg.DoModal();
+	// Toggle monitoring: start or stop. The button is an RC control in main dialog.
+	if (!m_bIsMonitoring) {
+		m_pMonitorWnd = new CMonitorWnd(this);
+		if (!m_pMonitorWnd->CreateMonitorWindow(this, &CClientSocket::GetInstance())) {
+			delete m_pMonitorWnd;
+			m_pMonitorWnd = nullptr;
+			MessageBox(_T("无法创建监视窗口"));
+			return;
+		}
+		m_pMonitorWnd->ShowWindow(SW_SHOW);
+		m_bIsMonitoring = true;
+		// change button text to indicate stop
+		m_btnWatchScreen.SetWindowText(_T("结束监控"));
+	} else {
+		// stop monitoring: destroy monitor window which will send REQ_STOP_WATCH and stop threads
+		if (m_pMonitorWnd) {
+			// DestroyWindow will trigger OnDestroy in CMonitorWnd
+			m_pMonitorWnd->DestroyWindow();
+			delete m_pMonitorWnd;
+			m_pMonitorWnd = nullptr;
+		} else {
+			// fallback: notify server and cleanup socket
+			Cpacket pkt(REQ_STOP_WATCH, NULL, 0);
+			CClientSocket::GetInstance().Send(pkt);
+			CClientSocket::GetInstance().SetScreenViewWnd(NULL);
+			CClientSocket::GetInstance().CloseSocket();
+		}
+		m_bIsMonitoring = false;
+		m_btnWatchScreen.SetWindowText(_T("屏幕监控"));
+	}
 }
 
 
