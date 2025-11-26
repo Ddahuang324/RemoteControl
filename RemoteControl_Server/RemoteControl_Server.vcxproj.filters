@@ -46,6 +46,12 @@
     <ClInclude Include="include\network\ServerSocket.h">
       <Filter>include\network</Filter>
     </ClInclude>
+    <ClInclude Include="include\network\CommandDispatcher.h">
+      <Filter>include\network</Filter>
+    </ClInclude>
+    <ClInclude Include="include\network\ServerRunner.h">
+      <Filter>include\network</Filter>
+    </ClInclude>
     <ClInclude Include="include\utils\RemoteControl_server.h">
       <Filter>include\utils</Filter>
     </ClInclude>
@@ -95,6 +101,12 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="src\network\ServerSocket.cpp">
+      <Filter>src\network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\network\CommandDispatcher.cpp">
+      <Filter>src\network</Filter>
+    </ClCompile>
+    <ClCompile Include="src\network\ServerRunner.cpp">
       <Filter>src\network</Filter>
     </ClCompile>
     <ClCompile Include="src\ui\LockDialog.cpp">

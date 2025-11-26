@@ -176,6 +176,8 @@
     <ClInclude Include="include\pch\targetver.h" />
     <ClInclude Include="include\Resource.h" />
     <ClInclude Include="include\network\ServerSocket.h" />
+    <ClInclude Include="include\network\CommandDispatcher.h" />
+    <ClInclude Include="include\network\ServerRunner.h" />
     <ClInclude Include="include\utils\RemoteControl_server.h" />
     <ClInclude Include="include\utils\ThreadPool.hpp" />
     <ClInclude Include="include\core\Enities.h" />
@@ -196,6 +198,8 @@
     </ClCompile>
     <ClCompile Include="src\RemoteControl_server.cpp" />
     <ClCompile Include="src\network\ServerSocket.cpp" />
+    <ClCompile Include="src\network\CommandDispatcher.cpp" />
+    <ClCompile Include="src\network\ServerRunner.cpp" />
     <ClCompile Include="src\core\LockMachine.cpp" />
     <ClCompile Include="src\ui\LockDialog.cpp" />
   </ItemGroup>
