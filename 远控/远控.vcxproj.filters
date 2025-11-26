@@ -38,6 +38,9 @@
     <Filter Include="src\utils">
       <UniqueIdentifier>{6b6142ce-1fc7-4911-811b-66b0334fa853}</UniqueIdentifier>
     </Filter>
+    <Filter Include="handlers">
+      <UniqueIdentifier>{B2E4A9D1-3C6F-4D2E-9A1B-1F2E3D4C5B6A}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ServerSocket.h">
@@ -61,6 +64,12 @@
     <ClInclude Include="LockDialog.h">
       <Filter>include\utils</Filter>
     </ClInclude>
+    <ClInclude Include="handlers\FileCommandHandler.h">
+      <Filter>handlers</Filter>
+    </ClInclude>
+    <ClInclude Include="handlers\MouseHandler.h">
+      <Filter>handlers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -74,6 +83,12 @@
     </ClCompile>
     <ClCompile Include="LockDialog.cpp">
       <Filter>src\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="handlers\FileCommandHandler.cpp">
+      <Filter>handlers</Filter>
+    </ClCompile>
+    <ClCompile Include="handlers\MouseHandler.cpp">
+      <Filter>handlers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

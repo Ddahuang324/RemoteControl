@@ -2,6 +2,9 @@
 #pragma once
 
 // 与客户端保持一致的命令字枚举（与远控/RemoteControl_server.cpp 中的数字映射一致）
+// Guard the CMD enum so multiple headers can include safely
+#ifndef REMOTE_CONTROL_CMD_ENUM
+#define REMOTE_CONTROL_CMD_ENUM
 enum CMD : unsigned short {
     CMD_NONE = 0,
     CMD_LIST_DRIVES = 1,
@@ -17,3 +20,4 @@ enum CMD : unsigned short {
     CMD_TEST_CONNECT = 2002,
     CMD_ERROR = 999
 };
+#endif // REMOTE_CONTROL_CMD_ENUM
