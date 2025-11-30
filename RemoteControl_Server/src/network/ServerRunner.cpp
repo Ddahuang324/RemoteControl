@@ -22,7 +22,7 @@ int ServerRunner::Run()
         CommandDispatcher dispatcher;
 
         serverSocket.Run([&dispatcher, &serverSocket](const Cpacket& packet) {
-            dispatcher.Dispatch(packet, serverSocket);
+            dispatcher.Dispatch(packet, serverSocket);//异步回调
         });
     }
     catch (const std::exception& ex) {

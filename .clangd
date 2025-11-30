@@ -1,2 +1,87 @@
 CompileFlags:
-  Add: [--std=c++17, --target=x86_64-pc-windows-msvc, -I, "d:/编程/项目/RemoteControl/RemoteControl_Client"]
+  Add:
+    # C++ 标准和目标平台
+    - --std=c++17
+    - --target=x86_64-pc-windows-msvc
+    
+    # 项目包含路径 (深度优化 - 覆盖所有子目录)
+    # 主项目根目录
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client
+    
+    # include 目录及其子目录
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/Infra
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol/Infra
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol/MVC
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol/MVC/model
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/MultiThread
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/include/ui
+    
+    # MVC 架构目录
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/mvc
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller
+    
+    # 网络层目录
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/network
+    
+    # 源代码目录
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/src
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/src/ui
+    - -Id:/编程/项目/RemoteControl/RemoteControl_Client/src/utils
+    
+    # Windows 和 MFC 预处理器定义
+    - -D_WINDOWS
+    - -DUNICODE
+    - -D_UNICODE
+    - -D_AFXDLL
+    - -DWIN32
+    - -D_WIN32
+    - -D_MSC_VER=1930
+    - -D_MFC_VER=0x0E00
+    - -D_DLL                       # 使用 DLL 运行时库
+    - -D_MT                        # 多线程
+    - -D_DEBUG                     # Debug 模式 (根据需要)
+    
+    # Visual Studio 和 Windows SDK 包含路径 (已根据实际安装路径配置)
+    - -ID:/Visual Studio/VC/Tools/MSVC/14.44.35207/atlmfc/include
+    - -ID:/Visual Studio/VC/Tools/MSVC/14.44.35207/include
+    - -IC:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/ucrt
+    - -IC:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um
+    - -IC:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/shared
+    - -IC:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/winrt
+    - -IC:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/cppwinrt
+    
+    # 额外的编译器标志 (提高 MSVC 兼容性)
+    - -fms-extensions              # 启用 Microsoft 扩展
+    - -fms-compatibility           # MSVC 兼容模式
+    - -fdelayed-template-parsing   # 延迟模板解析 (MSVC 行为)
+    - -Wno-microsoft               # 抑制 Microsoft 特定警告
+    - -Wno-pragma-pack             # 抑制 pragma pack 警告
+    - -ferror-limit=0              # 不限制错误数量 (显示所有错误)
+
+Diagnostics:
+  # 抑制 MFC 和 Windows 特有的警告
+  Suppress:
+    - unused-value
+    - unknown-pragmas
+    - microsoft-*
+    - pragma-pack
+    - ignored-attributes
+    - unused-parameter
+    - mismatched-tags
+    - typedef-redefinition       # 抑制 typedef 重定义警告 (DWORD 等类型)
+    - macro-redefined            # 抑制宏重定义警告
+    
+  # ClangTidy 配置 (禁用可能与 MFC 冲突的检查)
+  ClangTidy:
+    Remove:
+      - modernize-*              # MFC 使用旧式 C++ 模式
+      - readability-*            # MFC 代码风格特殊
+      - cppcoreguidelines-*      # 与 MFC 宏冲突
+      - hicpp-*                  # 高完整性 C++ 规则不适用
+      
+# 索引配置 (提高性能)
+Index:
+  Background: Build           # 后台索引模式

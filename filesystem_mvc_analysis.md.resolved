@@ -1,0 +1,619 @@
+# 文件系统MVC架构分析报告
+
+## 📋 执行摘要
+
+本报告分析了RemoteControl项目中文件系统功能从传统MFC实现向MVC架构迁移的可行性。通过对比原有"垃圾代码"和新设计的MVC接口,评估架构合理性和实施可行性。
+
+**核心结论**: 当前MVC架构设计**基本合理**,但存在**关键缺失**和**设计不一致**问题,需要补充和调整后方可实施。
+
+---
+
+## 🔍 一、原有实现分析("垃圾代码")
+
+### 1.1 核心文件
+
+| 文件 | 职责 | 代码行数 |
+|------|------|---------|
+| [RemoteControl_ClientDlg.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp) | 主对话框,包含所有文件系统UI逻辑 | ~881行 |
+| [RemoteControl_ClientDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.h) | 主对话框头文件 | ~123行 |
+| [DownloadProgressDlg.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/DownloadProgressDlg.cpp) | 下载进度对话框 | ~103行 |
+| [DownloadProgressDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/DownloadProgressDlg.h) | 进度对话框头文件 | ~37行 |
+
+### 1.2 功能清单
+
+原有实现直接在对话框类中混合了以下职责:
+
+```mermaid
+graph TD
+    A[CRemoteControlClientDlg] --> B[网络通信]
+    A --> C[UI渲染]
+    A --> D[文件系统操作]
+    A --> E[线程管理]
+    
+    B --> B1[发送CMD_DRIVER_INFO]
+    B --> B2[发送CMD_DIRECTORY_INFO]
+    B --> B3[发送CMD_DOWNLOAD_FILE]
+    B --> B4[发送CMD_DELETE_FILE]
+    B --> B5[发送CMD_RUN_FILE]
+    
+    C --> C1[TreeCtrl管理]
+    C --> C2[ListCtrl管理]
+    C --> C3[进度条更新]
+    
+    D --> D1[列出驱动器]
+    D --> D2[浏览目录]
+    D --> D3[下载文件]
+    D --> D4[删除文件]
+    D --> D5[打开文件]
+    
+    E --> E1[下载线程池]
+    E --> E2[消息传递WM_UPDATE_PROGRESS]
+```
+
+### 1.3 关键问题
+
+> [!CAUTION]
+> **严重的架构问题**
+
+1. **职责混乱**: UI、业务逻辑、网络通信全部耦合在对话框类中
+2. **难以测试**: 无法在没有UI的情况下测试文件系统逻辑
+3. **代码重复**: 多处重复的网络收发、错误处理代码
+4. **线程不安全**: 直接在工作线程操作UI控件(虽然用了PostMessage缓解)
+5. **难以复用**: 文件系统功能无法在其他模块中复用
+
+### 1.4 典型代码片段分析
+
+#### 下载文件实现 ([L710-758](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L710-L758))
+
+```cpp
+void CRemoteControlClientDlg::OnDownloadFile()
+{
+    // ❌ 问题1: UI逻辑和业务逻辑混合
+    if (m_strSelectedFile.IsEmpty() || m_strCurrentDirPath.IsEmpty()) {
+        MessageBox(_T("未选择文件"));
+        return;
+    }
+    
+    // ❌ 问题2: 直接操作网络层
+    Cpacket packet(CMD::CMD_DOWNLOAD_FILE, pathData);
+    if (!m_clientSocket.SendPacket(packet)) {
+        MessageBox(_T("发送下载请求失败"));
+        return;
+    }
+    
+    // ❌ 问题3: 手动管理进度对话框生命周期
+    CDownloadProgressDlg* pProgressDlg = new CDownloadProgressDlg(this);
+    pProgressDlg->Create(IDD_DOWNLOAD_PROGRESS_DIALOG, this);
+    
+    // ❌ 问题4: 直接传递指针到线程池
+    DownloadParams params = {this, ..., pProgressDlg};
+    m_threadPool.enqueue(DownloadFileTask, params);
+}
+```
+
+#### 下载任务线程 ([L25-72](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L25-L72))
+
+```cpp
+void DownloadFileTask(DownloadParams params) {
+    // ❌ 问题5: 全局函数,难以管理状态
+    // ❌ 问题6: 直接操作文件IO,没有抽象
+    CFile file;
+    file.Open(CString(params.savePath.c_str()), CFile::modeCreate | CFile::modeWrite);
+    
+    // ❌ 问题7: 网络接收逻辑重复(与其他地方类似)
+    while (true) {
+        std::optional<Cpacket> recvPacket = pSocket->GetNextPacketBlocking();
+        if (!recvPacket) { /* 错误处理 */ }
+        if (recvPacket->sCmd == CMD::CMD_ERROR) { /* 错误处理 */ }
+        // ...
+    }
+}
+```
+
+---
+
+## 🏗️ 二、MVC架构设计分析
+
+### 2.1 架构概览
+
+```mermaid
+graph TB
+    subgraph "View Layer"
+        V1[FileSystemView<br/>MFC对话框]
+        V2[DownloadProgressView<br/>进度对话框]
+    end
+    
+    subgraph "Controller Layer"
+        C1[FileSystemController<br/>协调器]
+    end
+    
+    subgraph "Model Layer"
+        M1[IFileSystemModel<br/>接口]
+        M2[FileSystemModel<br/>实现]
+        M3[INetworkModel<br/>网络接口]
+    end
+    
+    subgraph "Infrastructure"
+        I1[InterfaceProtocol<br/>资源容器]
+        I2[ThreadPool<br/>线程池]
+        I3[Socket<br/>网络层]
+    end
+    
+    V1 -->|用户操作| C1
+    V2 -->|进度回调| C1
+    C1 -->|调用业务逻辑| M1
+    M1 -.实现.-> M2
+    M2 -->|依赖| M3
+    M2 -->|使用| I1
+    M2 -->|使用| I2
+    M3 -->|使用| I3
+```
+
+### 2.2 接口定义分析
+
+#### IFileSystemModel接口 ([Interface.h:L60-78](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model/Interface.h#L60-L78))
+
+```cpp
+class IFileSystemModel : public IModel {
+public:
+  using ListCb = std::function<void(const std::vector<std::string> &files)>;
+  using ProgressCb = std::function<void(int percent)>; // 0-100
+  using ResultCb = std::function<void(bool success, const std::string &errmsg)>;
+
+  virtual void listDirectory(const std::string &path, ListCb cb) = 0;
+  virtual void downloadFile(const std::string &remotePath,
+                            const std::string &localPath, ProgressCb progress,
+                            ResultCb result) = 0;
+  virtual void uploadFile(const std::string &localPath,
+                          const std::string &remotePath, ProgressCb progress,
+                          ResultCb result) = 0;
+  virtual void cancelTransfer(const std::string &transferId) = 0;
+};
+```
+
+> [!NOTE]
+> **设计优点**
+> - ✅ 清晰的回调接口,支持异步操作
+> - ✅ 进度回调设计合理(0-100百分比)
+> - ✅ 错误处理通过ResultCb统一返回
+
+> [!WARNING]
+> **设计缺陷**
+
+**缺陷1: `listDirectory`接口过于简化**
+
+```cpp
+// 当前设计
+virtual void listDirectory(const std::string &path, ListCb cb) = 0;
+using ListCb = std::function<void(const std::vector<std::string> &files)>;
+
+// 问题: 只返回文件名列表,缺少关键信息
+// 原有实现需要区分:
+// - 文件 vs 目录 (isDir标志)
+// - 文件大小
+// - 是否有更多数据 (hasNext标志,用于流式传输)
+```
+
+**建议改进**:
+
+```cpp
+struct FileEntry {
+    std::string name;
+    bool isDirectory;
+    uint64_t size;
+    // 可选: 时间戳、权限等
+};
+
+using ListCb = std::function<void(const std::vector<FileEntry> &entries, bool hasMore)>;
+```
+
+**缺陷2: 缺少驱动器列表接口**
+
+原有实现有`CMD_DRIVER_INFO`命令([L367](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L367)),但MVC接口中缺失:
+
+```cpp
+// 需要添加
+virtual void listDrives(std::function<void(const std::vector<std::string> &drives)> cb) = 0;
+```
+
+**缺陷3: 缺少删除和打开文件接口**
+
+原有实现支持([L760-810](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L760-L810)):
+- [OnDeleteFile()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#760-786) - CMD_DELETE_FILE
+- [OnOpenFile()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#787-811) - CMD_RUN_FILE
+
+但接口中未定义:
+
+```cpp
+// 需要添加
+virtual void deleteFile(const std::string &path, ResultCb cb) = 0;
+virtual void runFile(const std::string &path, ResultCb cb) = 0;
+```
+
+**缺陷4: `cancelTransfer`的transferId设计不明确**
+
+```cpp
+virtual void cancelTransfer(const std::string &transferId) = 0;
+
+// 问题:
+// 1. transferId如何生成?谁负责管理?
+// 2. 如何将transferId与downloadFile/uploadFile关联?
+// 3. 是否需要在回调中返回transferId?
+```
+
+**建议改进**:
+
+```cpp
+// 方案1: 返回传输句柄
+struct TransferHandle {
+    std::string id;
+    void cancel();
+};
+
+virtual std::shared_ptr<TransferHandle> downloadFile(...) = 0;
+
+// 方案2: 简化为取消所有传输
+virtual void cancelAllTransfers() = 0;
+```
+
+### 2.3 InterfaceProtocol资源容器分析
+
+#### 设计思路 ([InterfaceProtocol.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol/MVC/model/InterfaceProtocol.h))
+
+```cpp
+struct InterfaceProtocol {
+  InterfaceProtocol() {
+    m_netRes = std::make_unique<NetworkResources>();
+    m_netBuffer = std::make_unique<NetworkBuffer>();
+    m_screenBuffer = std::make_unique<ScreenBuffer>();
+    m_screenPacketData = std::make_unique<ScreenPacketData>();
+    m_monitorRes = std::make_unique<MonitorResources>();
+  }
+
+protected:
+  std::unique_ptr<NetworkResources> m_netRes;
+  std::unique_ptr<NetworkBuffer> m_netBuffer;
+  std::unique_ptr<ScreenBuffer> m_screenBuffer;
+  // ...
+};
+```
+
+> [!IMPORTANT]
+> **架构问题: 资源容器设计过于臃肿**
+
+**问题分析**:
+
+1. **职责不清**: [InterfaceProtocol](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/include/Protocol/MVC/model/InterfaceProtocol.h#46-184)同时包含了网络、屏幕、监视等多个领域的资源
+2. **强耦合**: 所有Model都继承这个基类,即使不需要某些资源(如FileSystemModel不需要ScreenBuffer)
+3. **内存浪费**: 每个Model实例都会创建所有资源容器,即使用不到
+
+**对文件系统的影响**:
+
+```cpp
+class FileSystemModel : public IFileSystemModel {
+    // 继承自IModel -> InterfaceProtocol
+    // 会获得:
+    // - m_netRes ✅ 需要
+    // - m_netBuffer ✅ 需要
+    // - m_screenBuffer ❌ 不需要
+    // - m_screenPacketData ❌ 不需要
+    // - m_monitorRes ❌ 不需要
+};
+```
+
+**建议改进**:
+
+```cpp
+// 方案1: 按需组合
+class IModel {
+    virtual ~IModel() = default;
+};
+
+class FileSystemModel : public IFileSystemModel {
+private:
+    std::shared_ptr<INetworkModel> network_;  // 依赖注入
+    std::shared_ptr<ThreadPool> pool_;
+};
+
+// 方案2: 拆分资源容器
+struct NetworkProtocol {
+    std::unique_ptr<NetworkResources> m_netRes;
+    std::unique_ptr<NetworkBuffer> m_netBuffer;
+};
+
+struct MonitorProtocol {
+    std::unique_ptr<ScreenBuffer> m_screenBuffer;
+    std::unique_ptr<MonitorResources> m_monitorRes;
+};
+```
+
+---
+
+## 📊 三、功能对比矩阵
+
+| 功能 | 原有实现 | MVC接口定义 | 状态 | 优先级 |
+|------|---------|------------|------|--------|
+| 列出驱动器 | ✅ CMD_DRIVER_INFO | ❌ 缺失 | 🔴 需添加 | P0 |
+| 浏览目录 | ✅ CMD_DIRECTORY_INFO | ⚠️ 简化版 | 🟡 需增强 | P0 |
+| 下载文件 | ✅ 带进度 | ✅ downloadFile | 🟢 已定义 | P0 |
+| 上传文件 | ❌ 未实现 | ✅ uploadFile | 🟢 新增功能 | P1 |
+| 删除文件 | ✅ CMD_DELETE_FILE | ❌ 缺失 | 🔴 需添加 | P0 |
+| 打开文件 | ✅ CMD_RUN_FILE | ❌ 缺失 | 🔴 需添加 | P1 |
+| 取消传输 | ❌ 未实现 | ⚠️ 设计不明确 | 🟡 需细化 | P2 |
+
+---
+
+## 🔧 四、实施可行性评估
+
+### 4.1 技术可行性: ⭐⭐⭐⭐☆ (4/5)
+
+#### ✅ 有利因素
+
+1. **网络层已抽象**: [INetworkModel](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/model/Interface.h#29-59)提供了良好的网络通信抽象
+2. **线程池可复用**: 现有`ThreadPool`可直接用于异步操作
+3. **协议已定义**: `File_Info`等实体类支持序列化/反序列化
+4. **回调机制成熟**: 使用`std::function`实现异步回调
+
+#### ⚠️ 挑战因素
+
+1. **接口不完整**: 需要补充3-4个核心接口
+2. **资源容器重构**: 需要解耦[InterfaceProtocol](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/include/Protocol/MVC/model/InterfaceProtocol.h#46-184)
+3. **MFC集成**: 需要设计View层如何调用Model
+
+### 4.2 工作量估算
+
+```mermaid
+gantt
+    title 文件系统MVC迁移时间线
+    dateFormat  YYYY-MM-DD
+    section 接口设计
+    补充缺失接口           :a1, 2025-12-01, 2d
+    重构资源容器           :a2, after a1, 3d
+    section Model实现
+    FileSystemModel核心    :b1, after a2, 5d
+    网络通信集成           :b2, after b1, 3d
+    section Controller
+    FileSystemController   :c1, after b2, 3d
+    section View适配
+    修改现有对话框         :d1, after c1, 4d
+    section 测试
+    单元测试              :e1, after d1, 3d
+    集成测试              :e2, after e1, 2d
+```
+
+**总计**: 约25个工作日 (5周)
+
+### 4.3 风险评估
+
+| 风险 | 影响 | 概率 | 缓解措施 |
+|------|------|------|---------|
+| 接口设计变更 | 高 | 中 | 先完成详细设计评审 |
+| 线程安全问题 | 高 | 中 | 严格使用mutex保护共享状态 |
+| MFC回调到主线程 | 中 | 高 | 使用PostMessage模式 |
+| 性能下降 | 中 | 低 | 保持原有异步设计 |
+
+---
+
+## ✅ 五、改进建议
+
+### 5.1 接口补充 (P0 - 必须)
+
+```cpp
+// 在 IFileSystemModel 中添加:
+
+// 1. 驱动器列表
+virtual void listDrives(
+    std::function<void(const std::vector<std::string> &drives)> cb) = 0;
+
+// 2. 增强的目录列表
+struct FileEntry {
+    std::string name;
+    bool isDirectory;
+    uint64_t size;
+};
+virtual void listDirectory(
+    const std::string &path, 
+    std::function<void(const std::vector<FileEntry> &entries, bool hasMore)> cb) = 0;
+
+// 3. 删除文件
+virtual void deleteFile(
+    const std::string &path, 
+    ResultCb cb) = 0;
+
+// 4. 运行文件
+virtual void runFile(
+    const std::string &path, 
+    ResultCb cb) = 0;
+```
+
+### 5.2 资源容器重构 (P1 - 重要)
+
+```cpp
+// 拆分 InterfaceProtocol
+class IModel {
+public:
+    virtual ~IModel() = default;
+};
+
+// FileSystemModel 只依赖需要的资源
+class FileSystemModel : public IFileSystemModel {
+public:
+    explicit FileSystemModel(
+        std::shared_ptr<INetworkModel> network,
+        std::shared_ptr<ThreadPool> pool = nullptr);
+
+private:
+    std::shared_ptr<INetworkModel> network_;
+    std::shared_ptr<ThreadPool> pool_;
+    
+    // 文件系统特定的状态
+    std::mutex transfersMutex_;
+    std::map<std::string, std::atomic<bool>> activeTransfers_;
+};
+```
+
+### 5.3 Controller设计 (P1 - 重要)
+
+```cpp
+class FileSystemController {
+public:
+    FileSystemController(
+        std::shared_ptr<IFileSystemModel> model,
+        FileSystemView* view);
+    
+    // View调用的接口
+    void onListDrivesRequested();
+    void onDirectorySelected(const std::string& path);
+    void onDownloadRequested(const std::string& remotePath, const std::string& localPath);
+    void onDeleteRequested(const std::string& path);
+    
+private:
+    std::shared_ptr<IFileSystemModel> model_;
+    FileSystemView* view_;  // 弱引用或接口
+    
+    // 回调处理
+    void handleDrivesList(const std::vector<std::string>& drives);
+    void handleDirectoryList(const std::vector<FileEntry>& entries, bool hasMore);
+    void handleDownloadProgress(int percent);
+    void handleDownloadResult(bool success, const std::string& errmsg);
+};
+```
+
+### 5.4 View适配 (P0 - 必须)
+
+```cpp
+// CRemoteControlClientDlg 改造
+class CRemoteControlClientDlg : public CDialogEx, public FileSystemView {
+public:
+    // 初始化时创建Controller
+    BOOL OnInitDialog() override {
+        // ...
+        auto network = std::make_shared<NetworkModel>(&m_clientSocket);
+        auto fsModel = std::make_shared<FileSystemModel>(network, &m_threadPool);
+        m_fsController = std::make_unique<FileSystemController>(fsModel, this);
+    }
+    
+    // 原有事件处理改为调用Controller
+    void OnBnClickedButton2() {
+        m_fsController->onListDrivesRequested();
+    }
+    
+    void OnTvnSelchangedTree3(NMHDR* pNMHDR, LRESULT* pResult) {
+        CString path = GetItemPath(hItem);
+        m_fsController->onDirectorySelected(CT2A(path));
+    }
+    
+    // 实现 FileSystemView 接口
+    void displayDrives(const std::vector<std::string>& drives) override {
+        // 在UI线程更新TreeCtrl
+        m_Tree.DeleteAllItems();
+        HTREEITEM hRoot = m_Tree.InsertItem(_T("Drives"));
+        for (const auto& drive : drives) {
+            m_Tree.InsertItem(CString(drive.c_str()), hRoot);
+        }
+    }
+    
+private:
+    std::unique_ptr<FileSystemController> m_fsController;
+};
+```
+
+---
+
+## 📈 六、迁移路线图
+
+### 阶段1: 接口完善 (Week 1)
+
+- [ ] 补充`listDrives`接口
+- [ ] 增强`listDirectory`接口(返回FileEntry)
+- [ ] 添加`deleteFile`和`runFile`接口
+- [ ] 细化`cancelTransfer`设计
+- [ ] 编写接口文档和使用示例
+
+### 阶段2: Model实现 (Week 2-3)
+
+- [ ] 实现[FileSystemModel](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/model/FileSystemModel.h#11-24)核心逻辑
+- [ ] 集成[INetworkModel](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/model/Interface.h#29-59)进行通信
+- [ ] 实现异步回调机制
+- [ ] 添加错误处理和重试逻辑
+- [ ] 编写Model层单元测试
+
+### 阶段3: Controller开发 (Week 3-4)
+
+- [ ] 设计`FileSystemController`
+- [ ] 实现View到Model的调用转换
+- [ ] 处理线程切换(工作线程 -> UI线程)
+- [ ] 实现进度更新机制
+
+### 阶段4: View适配 (Week 4-5)
+
+- [ ] 重构[CRemoteControlClientDlg](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#112-117)
+- [ ] 移除直接的网络调用
+- [ ] 通过Controller调用Model
+- [ ] 保持UI交互逻辑不变
+
+### 阶段5: 测试验证 (Week 5)
+
+- [ ] 功能回归测试
+- [ ] 性能对比测试
+- [ ] 内存泄漏检查
+- [ ] 边界条件测试
+
+---
+
+## 🎯 七、总结与建议
+
+### 7.1 架构合理性评分
+
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| 接口设计 | ⭐⭐⭐☆☆ | 基本合理,但缺失关键接口 |
+| 职责分离 | ⭐⭐⭐⭐☆ | MVC分层清晰 |
+| 可扩展性 | ⭐⭐⭐⭐☆ | 接口抽象良好 |
+| 可测试性 | ⭐⭐⭐⭐⭐ | 完全解耦,易于测试 |
+| 资源管理 | ⭐⭐☆☆☆ | InterfaceProtocol设计臃肿 |
+| **综合评分** | **⭐⭐⭐⭐☆** | **可行,需改进** |
+
+### 7.2 可行性结论
+
+> [!IMPORTANT]
+> **迁移可行,但需先完成接口补充**
+
+✅ **推荐迁移的理由**:
+1. 显著提升代码可维护性
+2. 支持单元测试,提高质量
+3. 便于功能扩展(如上传文件)
+4. 降低模块间耦合
+
+⚠️ **前置条件**:
+1. 必须补充缺失的接口(listDrives, deleteFile, runFile)
+2. 建议重构InterfaceProtocol资源容器
+3. 需要设计清晰的Controller层
+4. 需要充分的测试覆盖
+
+### 7.3 下一步行动
+
+1. **立即**: 召开设计评审会议,确认接口补充方案
+2. **本周**: 完成接口定义和资源容器重构设计
+3. **下周**: 开始Model层实现
+4. **两周后**: 开始Controller和View适配
+5. **一个月后**: 完成迁移和测试
+
+---
+
+## 📚 附录
+
+### A. 关键代码位置索引
+
+- 原有下载实现: [RemoteControl_ClientDlg.cpp:L710-758](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L710-L758)
+- 下载任务线程: [RemoteControl_ClientDlg.cpp:L25-72](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L25-L72)
+- 目录浏览实现: [RemoteControl_ClientDlg.cpp:L516-642](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_ClientDlg.cpp#L516-L642)
+- IFileSystemModel接口: [Interface.h:L60-78](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model/Interface.h#L60-L78)
+- InterfaceProtocol定义: [InterfaceProtocol.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/include/Protocol/MVC/model/InterfaceProtocol.h)
+
+### B. 参考资料
+
+- MVC模式最佳实践
+- C++异步编程模式
+- MFC多线程编程指南
+- 网络协议设计规范
