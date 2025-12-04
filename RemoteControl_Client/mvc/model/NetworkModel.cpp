@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "NetworkModel.h"
 #include <chrono>
 #include <utility>
@@ -110,6 +111,7 @@ void NetworkModel::setOnStatusChanged(StatusCb cb) {
 }
 
 void NetworkModel::RecvThreadLoop() {
+    NMLog("RecvThreadLoop started");
     while (m_netRes->running.load()) {
         // Try to receive one packet from low-level socket
         if (!m_netRes->socket) {
@@ -119,19 +121,30 @@ void NetworkModel::RecvThreadLoop() {
         auto opt = m_netRes->socket->RecvPacket();
         if (opt) {
             Packet p = ToPublic(*opt);
+            
+            // 添加日志
+            std::ostringstream ss;
+            ss << "RecvThreadLoop: received packet cmd=" << p.sCmd << " dataSize=" << p.data.size();
+            NMLog(ss.str().c_str());
+            
             {
                 std::lock_guard<std::mutex> lk(m_netBuffer->queueMutex);
                 m_netBuffer->packetQueue.push_back(p);
                 while (m_netBuffer->packetQueue.size() > m_netBuffer->maxQueue) m_netBuffer->packetQueue.pop_front();
             }
             m_netBuffer->queueCv.notify_one();
-            if (m_netRes->packetCb) m_netRes->packetCb(p);
+            if (m_netRes->packetCb) {
+                NMLog("RecvThreadLoop: calling packetCb");
+                m_netRes->packetCb(p);
+                NMLog("RecvThreadLoop: packetCb returned");
+            }
             continue; // try again immediately
         }
 
         // No packet right now: sleep a bit to avoid busy loop
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    NMLog("RecvThreadLoop ended");
 }
 
 Packet NetworkModel::ToPublic(const Packet& p) {

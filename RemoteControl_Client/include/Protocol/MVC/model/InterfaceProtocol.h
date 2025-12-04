@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../Infra/Packet.hpp"
-#include "../../Infra/Socket.hpp"
-#include "ThreadPool.hpp"
+#include "../../../Infra/Packet.hpp"
+#include "../../../Infra/Socket.hpp"
+#include "../../../Infra/ThreadPool.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -45,7 +45,7 @@ struct FrameData {
 };
 // 前向声明：decoder 与 IIoModel 在实现端定义于全局命名空间
 struct IDecoder; // decoder 接口可在实现端定义为全局类型以匹配此处
-struct IIoModel; // IIoModel 在 Interface.h 中声明，前向声明以便在
+class IIoModel;  // IIoModel 在 Interface.h 中声明，前向声明以便在
                  // MonitorResources 中使用
 
 struct NetworkProtocol {

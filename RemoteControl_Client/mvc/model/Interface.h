@@ -1,16 +1,17 @@
 #pragma once
 
+#include "../../include/Infra/Packet.hpp"
+#include "../../include/Infra/Socket.hpp"
+#include "../../include/Protocol/Infra/PacketProtocol.h"
+#include "../../include/Protocol/Infra/SocketProtocol.h"
+#include "../../include/Protocol/MVC/model/InterfaceProtocol.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-#include "../../include/Protocol/MVC/model/InterfaceProtocol.h"
-#include "Packet.hpp"
-#include "PacketProtocol.h"
-#include "Socket.hpp"
-#include "SocketProtocol.h"
+
 
 // 基础类型别名（与 clientSocket.h 中的类型对应）
 using BYTE = uint8_t;
@@ -42,7 +43,7 @@ public:
 
   // 阻塞/轮询式获取
   virtual std::optional<Packet>
-  getNextPacketBlocking(int timeoutMs = 15000) = 0;
+  getNextPacketBlocking(int timeoutMs = 5000) = 0;
   virtual std::optional<Packet> getLatestPacket() = 0; // 获取最新，丢弃旧帧
 
   // 缓冲/队列控制
@@ -55,8 +56,6 @@ public:
   virtual void setOnStatusChanged(StatusCb cb) = 0;
 };
 
-
-
 // ---------------- IFileSystemModel ----------------
 class IFileSystemModel : public IModel, public NetworkProtocol {
 public:
@@ -67,7 +66,8 @@ public:
     virtual void cancel() = 0;
   };
 
-  using ListCb = std::function<void(const std::vector<FileSystemProtocol::FileEntry> &entries, bool hasMore)>;
+  using ListCb = std::function<void(
+      const std::vector<FileSystemProtocol::FileEntry> &entries, bool hasMore)>;
   using DrivesCb = std::function<void(const std::vector<std::string> &drives)>;
   using ProgressCb = std::function<void(int percent)>; // 0-100
   using ResultCb = std::function<void(bool success, const std::string &errmsg)>;
@@ -97,12 +97,15 @@ public:
   virtual void runFile(const std::string &path, ResultCb cb) = 0;
 };
 
+
+
 // ---------------- IMonitorModel ----------------
 
 class IMonitorModel : public IModel,
                       public NetworkProtocol,
                       public MonitorProtocol {
 public:
+
   using FrameCb = std::function<void(std::shared_ptr<const FrameData>)>;
   virtual ~IMonitorModel() = default;
 
@@ -116,6 +119,9 @@ public:
 
   // 将 IIoModel 注入到 MonitorModel，使 Model 可在需要时委托输入注入。
   virtual void setIoModel(std::shared_ptr<IIoModel> io) = 0;
+  
+  // 将 INetworkModel 注入到 MonitorModel，使 Model 可以发送屏幕请求包。
+  virtual void setNetworkModel(std::shared_ptr<INetworkModel> net) = 0;
 
   // 便捷转发接口（Controller 可直接通过 MonitorModel 调用，这些将委托给
   // IIoModel）

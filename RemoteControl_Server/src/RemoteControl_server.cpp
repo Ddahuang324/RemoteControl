@@ -39,7 +39,7 @@ int main()
         else
         {
             try {
-                ServerRunner runner(12345);
+                ServerRunner runner(9527);
                 return runner.Run();
             }
             catch (const std::exception& ex) {

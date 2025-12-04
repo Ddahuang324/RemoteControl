@@ -1,8 +1,9 @@
 
 // encoding: UTF-8
+#include "pch.h"
 #include "MoniterModel.h"
 #include "Interface.h"
-#include "pch.h"
+
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -603,6 +604,44 @@ void MonitorModel::setIoModel(std::shared_ptr<IIoModel> io) {
   std::lock_guard<std::mutex> lg(
       m_monitorRes->recordMutex); // reuse mutex for simple protection
   m_monitorRes->ioModel = io;
+}
+
+void MonitorModel::setNetworkModel(std::shared_ptr<INetworkModel> net) {
+  net_ = std::move(net);
+  // Ensure protocol resources exist
+  if (!m_monitorRes)
+    m_monitorRes = std::make_unique<MonitorProtocol::MonitorResources>();
+
+  // Clear existing buffer
+  if (m_netBuffer) {
+    std::lock_guard<std::mutex> lk(m_netBuffer->queueMutex);
+    m_netBuffer->packetQueue.clear();
+  }
+
+  if (net_) {
+    // When network receives a packet, push it into this model's buffer and notify
+    net_->setOnPacketReceived([this](const Packet &p) {
+      if (!m_netBuffer) return;
+      {
+        std::lock_guard<std::mutex> lk(m_netBuffer->queueMutex);
+        m_netBuffer->packetQueue.push_back(p);
+        while (m_netBuffer->packetQueue.size() > m_netBuffer->maxQueue)
+          m_netBuffer->packetQueue.pop_front();
+      }
+      m_netBuffer->queueCv.notify_one();
+    });
+
+    // On disconnect, wake up waiting threads and stop monitor if necessary
+    net_->setOnStatusChanged([this](bool connected) {
+      if (!connected) {
+        if (m_monitorRes) {
+          m_monitorRes->running.store(false);
+          if (m_netBuffer) m_netBuffer->queueCv.notify_all();
+          m_monitorRes->screenCv.notify_all();
+        }
+      }
+    });
+  }
 }
 
 void MonitorModel::injectMouse(int x, int y, int button, bool down) {

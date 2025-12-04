@@ -52,7 +52,9 @@ int DirectoryInfor(const std::string& path, CServerSocket& ClientSocket){
 			const auto& entry = entries[i];
 			try {
 				bool hasNext = (i < entries.size() - 1);
-				File_Info fileInfo(std::filesystem::is_directory(entry.path()), entry.path().filename().string(), hasNext);
+				// 修复：发送完整路径而不是仅文件名，这样客户端可以正确构建下级目录请求
+				std::string fullPath = entry.path().string();
+				File_Info fileInfo(std::filesystem::is_directory(entry.path()), fullPath, hasNext);
 				ClientSocket.SendPacket(Cpacket(CMD::CMD_DIRECTORY_INFO, fileInfo.FileInfoSerialize()));
 			} catch (std::filesystem::filesystem_error& e) {
 				std::cerr << "Error accessing file: " << e.what() << std::endl;

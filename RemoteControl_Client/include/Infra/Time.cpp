@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "Time.hpp"
 
 uint64_t TimeUtils::getCurrentTimestampMs() {

@@ -41,9 +41,13 @@ private:
   std::shared_ptr<INetworkModel> network_;
   std::shared_ptr<ThreadPool> pool_;
 
-  // 串行化下载任务：短期修复，尊重服务端单连接单传输逻辑
-  // 所有 downloadFile 的工作线程在开始网络交互前都会持有此互斥锁，
+  // 串行化所有网络操作：确保同一时刻只有一个线程在进行网络交互
+  // 这包括 listDrives、listDirectory、downloadFile、deleteFile、runFile 等操作
   // 保证同一时刻只有一个线程在调用 network_->sendPacket/getNextPacketBlocking。
+  // 这是必要的，因为服务端使用单连接模型，请求和响应必须配对。
+  std::mutex networkMutex_;
+  
+  // 保留 downloadMutex_ 用于向后兼容（可在后续版本移除）
   std::mutex downloadMutex_;
 
   // 本地 transfer id 计数器

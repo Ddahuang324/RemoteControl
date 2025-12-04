@@ -29,6 +29,13 @@ public:
 
   // IIoModel 委托（Controller 可注入）
   void setIoModel(std::shared_ptr<IIoModel> io) override;
+  
+  // INetworkModel 注入（用于发送屏幕请求）
+  void setNetworkModel(std::shared_ptr<INetworkModel> net) override;
+  
   void injectMouse(int x, int y, int button, bool down) override;
   void injectKey(int keycode, bool down) override;
+
+private:
+  std::shared_ptr<INetworkModel> net_;  // 用于发送屏幕请求
 };
