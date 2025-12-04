@@ -1,17 +1,18 @@
 #pragma once
 
-#include "../interfaces/IController.h"
-#include "../model/Interface.h"
+#include "../../include/Protocol/MVC/view/ViewProtocol.h"
+#include "../controller/IController.h"
 #include "../resources/resource_mvc.h"
 #include "afxcmn.h"
 #include "afxdialogex.h"
 #include "afxdlgs.h" // For CFileDialog
 #include "afxext.h"  // For CToolBar, CStatusBar
 #include "afxwin.h"
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
-#include <map>
+
 
 // 自定义消息 - 用于后台线程通过PostMessage更新UI
 #define WM_UPDATE_DRIVE_LIST (WM_APP + 0x101)
@@ -35,10 +36,8 @@ struct SubDirUpdateData {
 // ============================================================================
 class RemoteControlViewDlg : public CDialogEx {
 public:
-  // 构造函数: 接收Model接口(用于注册回调等)
-  explicit RemoteControlViewDlg(std::shared_ptr<INetworkModel> network,
-                                std::shared_ptr<IFileSystemModel> fileSystem,
-                                CWnd *pParent = nullptr);
+  // 构造函数
+  explicit RemoteControlViewDlg(CWnd *pParent = nullptr);
 
   virtual ~RemoteControlViewDlg();
 
@@ -150,25 +149,11 @@ protected:
   afx_msg LRESULT OnUpdateSubDirs(WPARAM wParam, LPARAM lParam);
 
 private:
-  // ===== 响应式布局支持 =====
-  struct ControlAnchor {
-    int nID; // 控件ID
-    bool anchorLeft;
-    bool anchorTop;
-    bool anchorRight;
-    bool anchorBottom;
-  };
-
-  std::vector<ControlAnchor> m_layoutRules; // 布局规则
-  CRect m_rcOriginalRect;                    // OnInitDialog 时的客户区
-  std::map<int, CRect> m_originalControlRects; // 每个受控件的初始 rect
-
-  // 调整单个控件布局（在 OnSize 中调用）
+  // ===== 响应式布局支持 (已迁移到 ViewProtocol) =====
+  // 布局规则和初始 rect 存储在 m_protocol->layout
   void AdjustControlLayout(int cx, int cy);
 
-  // ---- Model接口 ----
-  std::shared_ptr<INetworkModel> network_;
-  std::shared_ptr<IFileSystemModel> fileSystem_;
+  // ---- Model接口 已移除 ----
 
   // ---- Controller ----
   std::shared_ptr<IMainController> controller_;
@@ -206,17 +191,8 @@ private:
   CButton m_groupFiles;
   CButton m_groupMonitor;
 
-  // ---- 内部状态 ----
-  HICON m_hIcon;
-  bool m_bConnected;
-  bool m_bMonitoring;        // 屏幕监视状态
-  bool m_bFileListCleared;   // 标记文件列表是否已为新目录清空
-  CString m_strCurrentPath;  // 当前浏览的路径
-  CString m_strSelectedFile; // 当前选中的文件
-
-  // ---- Debounce state ----
-  CString m_strLastSelectedPath; // Last selected path (for OnTreeSelChanged
-                                 // debounce)
+  // ---- 内部状态 (迁移到 ViewProtocol) ----
+  std::unique_ptr<ViewProtocol::MainViewProtocol> m_protocol;
 
   // ---- 辅助方法 ----
 

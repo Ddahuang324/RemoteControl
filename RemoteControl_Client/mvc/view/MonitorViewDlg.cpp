@@ -13,13 +13,11 @@
 // 鏋勯€犱笌鏋愭瀯
 // ============================================================================
 
-MonitorViewDlg::MonitorViewDlg(std::shared_ptr<IMonitorModel> monitor,
-                               std::shared_ptr<IIoModel> io, CWnd *pParent)
-    : CDialogEx(IDD_MVC_MONITOR_DIALOG, pParent), monitor_(monitor), io_(io),
-      controller_(nullptr), m_fZoomScale(1.0f), m_bFullscreen(false),
-      m_bMouseControlEnabled(false), m_bKeyboardControlEnabled(false),
-      m_bRecording(false), m_bScreenLocked(false), m_nCurrentFPS(0),
-      m_nCurrentLatency(0) {}
+MonitorViewDlg::MonitorViewDlg(CWnd *pParent)
+    : CDialogEx(IDD_MVC_MONITOR_DIALOG, pParent), controller_(nullptr),
+      m_fZoomScale(1.0f), m_bFullscreen(false), m_bMouseControlEnabled(false),
+      m_bKeyboardControlEnabled(false), m_bRecording(false),
+      m_bScreenLocked(false), m_nCurrentFPS(0), m_nCurrentLatency(0) {}
 
 MonitorViewDlg::~MonitorViewDlg() {}
 

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../interfaces/IController.h"
-#include "../model/Interface.h"
+#include "../controller/IController.h"
 #include "../resources/resource_mvc.h"
 #include "afxdialogex.h"
 #include "afxwin.h"
@@ -18,9 +17,7 @@
 // ============================================================================
 class MonitorViewDlg : public CDialogEx {
 public:
-  explicit MonitorViewDlg(std::shared_ptr<IMonitorModel> monitor,
-                          std::shared_ptr<IIoModel> io,
-                          CWnd *pParent = nullptr);
+  explicit MonitorViewDlg(CWnd *pParent = nullptr);
 
   virtual ~MonitorViewDlg();
 
@@ -98,9 +95,7 @@ protected:
   afx_msg LRESULT OnUpdateFrame(WPARAM wParam, LPARAM lParam);
 
 private:
-  // ---- Model接口 ----
-  std::shared_ptr<IMonitorModel> monitor_;
-  std::shared_ptr<IIoModel> io_;
+  // ---- Model接口 (已移除) ----
 
   // ---- Controller ----
   std::shared_ptr<IMonitorController> controller_;

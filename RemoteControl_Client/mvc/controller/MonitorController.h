@@ -4,7 +4,7 @@
 #include <memory>
 #include <Windows.h>
 #include "../model/Interface.h"
-#include "../interfaces/IController.h"
+#include "../controller/IController.h"
 
 class MonitorController : public IMonitorController {
 public:

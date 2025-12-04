@@ -1,195 +1,273 @@
-# 屏幕监控 UI 功能实现计划
+# VIEW层解耦重构实现计划
 
-实现锁机/解锁功能按钮和优化鼠标坐标映射，确保在屏幕监控区域的鼠标操作能正确反映到被控端。
-
-## 现有代码分析
-
-### 已有实现
-1. **锁机命令协议**: `CMD_LOCK_MACHINE = 9`, `CMD_UNLOCK_MACHINE = 10` 已在 [PacketProtocol.h](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/include/Protocol/Infra/PacketProtocol.h) 定义
-2. **侧边栏按钮**: [OnSidebarLockScreen()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp#782-792) 已创建，但只有 TODO 注释
-3. **鼠标坐标转换**: [WindowToRemote()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp#438-458) 方法已实现基本逻辑
-4. **鼠标事件发送**: `IOModel::injectMouse()` 通过 [MouseEventData](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/Enities.h#74-120) 序列化发送
-
-### 需要修改
-1. 添加锁机/解锁的 Controller 接口和实现
-2. 完善 [OnSidebarLockScreen()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp#782-792) 实际调用逻辑
-3. 优化坐标转换确保边界正确处理
+本文档详细说明如何重构VIEW层，使其 **只通过IController接口与Controller层交互**，消除对Model层的直接依赖。
 
 ---
 
-## Proposed Changes
+## 问题背景
 
-### Component 1: 接口层
+### 当前架构问题
 
-#### [MODIFY] [IController.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/interfaces/IController.h)
-在 [IMonitorController](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/interfaces/IController.h#66-116) 类中添加锁机控制方法：
-```cpp
-// 锁定/解锁远程屏幕
-virtual void OnLockScreen() = 0;
-virtual void OnUnlockScreen() = 0;
+```mermaid
+graph LR
+    subgraph 当前架构-有耦合
+        V[View] --> C[IController]
+        V --> M[IModel]
+        C --> M
+    end
 ```
 
-#### [MODIFY] [Interface.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model/Interface.h)
-在 [IIoModel](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/model/Interface.h#134-142) 类中添加锁机命令方法:
-```cpp
-// 发送锁机/解锁命令
-virtual void sendLockCommand(bool lock) = 0;
+| 文件 | 问题 | 详情 |
+|------|------|------|
+| [RemoteControlViewDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.h) | 持有Model引用 | `network_`, `fileSystem_` 成员变量 |
+| [MonitorViewDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.h) | 持有Model引用 | `monitor_`, `io_` 成员变量 |
+| [RemoteControlViewDlg.cpp:1077](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.cpp#L1077) | 直接调用Model | `fileSystem_->listDirectory()` |
+
+### 目标架构
+
+```mermaid
+graph LR
+    subgraph 目标架构-解耦
+        V2[View] --> C2[IController]
+        C2 --> M2[IModel]
+        C2 -.->|回调更新| V2
+    end
 ```
 
 ---
 
-### Component 2: Model 层
+## 用户审核事项
 
-#### [MODIFY] [IOModel.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model/IOModel.h)
-添加方法声明:
-```cpp
-void sendLockCommand(bool lock) override;
+> [!IMPORTANT]
+> **构造函数签名变更**：[RemoteControlViewDlg](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.cpp#17-32) 和 [MonitorViewDlg](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.h#19-166) 构造函数将移除Model参数，可能影响测试代码或其他创建View的位置。
+
+> [!WARNING]
+> **接口扩展**：需要在 [IMainController](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/controller/IController.h#18-61) 添加新方法来处理树节点展开时的子目录加载，这是一个**接口变更**。
+
+---
+
+## 变更方案
+
+### 组件1: Controller接口扩展
+
+#### [MODIFY] [IController.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller/IController.h)
+
+**新增方法** 到 [IMainController](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/controller/IController.h#18-61) 接口：
+
+```diff
+class IMainController {
+public:
+  // ... existing methods ...
+
++ // 树节点展开时加载子目录（View层需要提供HTREEITEM句柄以便后续回调更新）
++ virtual void OnTreeNodeExpanding(void* hTreeItem, const std::string& path) = 0;
+};
 ```
 
-#### [MODIFY] [IOModel.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/model/IOModel.cpp)
-实现发送锁机/解锁命令:
+---
+
+### 组件2: Controller实现更新
+
+#### [MODIFY] [MainController.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller/MainController.h)
+
+```diff
+class MainController : public IMainController {
+public:
+  // ... existing methods ...
+  
++ void OnTreeNodeExpanding(void* hTreeItem, const std::string& path) override;
+};
+```
+
+#### [MODIFY] [MainController.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller/MainController.cpp)
+
+实现新方法，将 [OnTreeItemExpanding](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.cpp#1021-1100) 中对 `fileSystem_->listDirectory()` 的调用移至Controller：
+
 ```cpp
-void IOModel::sendLockCommand(bool lock) {
-    if (!net_) return;
-    Packet pkt;
-    pkt.sCmd = static_cast<WORD>(lock ? CMD_LOCK_MACHINE : CMD_UNLOCK_MACHINE);
-    pkt.data.clear(); // 无需额外数据
-    net_->sendPacket(pkt);
+void MainController::OnTreeNodeExpanding(void* hTreeItem, const std::string& path) {
+    HTREEITEM hItem = static_cast<HTREEITEM>(hTreeItem);
+    HWND hWnd = m_protocol->view->GetSafeHwnd();
+    
+    auto isFirst = std::make_shared<bool>(true);
+    m_protocol->fileSystem->listDirectory(
+        path,
+        [hWnd, hItem, isFirst](const std::vector<FileSystemProtocol::FileEntry>& entries, bool hasMore) {
+            if (!::IsWindow(hWnd)) return;
+            
+            auto* pData = new SubDirUpdateData();
+            pData->hParent = hItem;
+            pData->entries = entries;
+            pData->isFirst = *isFirst;
+            *isFirst = false;
+            
+            ::PostMessage(hWnd, WM_UPDATE_SUB_DIRS, (WPARAM)pData, 0);
+        });
 }
 ```
 
 ---
 
-### Component 3: Controller 层
+### 组件3: View层重构 — RemoteControlViewDlg
 
-#### [MODIFY] [MonitorController.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller/MonitorController.h)
-添加方法声明:
-```cpp
-void OnLockScreen() override;
-void OnUnlockScreen() override;
+#### [MODIFY] [RemoteControlViewDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.h)
+
+```diff
+class RemoteControlViewDlg : public CDialogEx {
+public:
+- explicit RemoteControlViewDlg(std::shared_ptr<INetworkModel> network,
+-                               std::shared_ptr<IFileSystemModel> fileSystem,
+-                               CWnd *pParent = nullptr);
++ explicit RemoteControlViewDlg(CWnd *pParent = nullptr);
+
+private:
+- // ---- Model接口 ----
+- std::shared_ptr<INetworkModel> network_;
+- std::shared_ptr<IFileSystemModel> fileSystem_;
+
+  // ---- Controller ----
+  std::shared_ptr<IMainController> controller_;
+};
 ```
 
-#### [MODIFY] [MonitorController.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/controller/MonitorController.cpp)
-实现锁机/解锁调用:
-```cpp
-void MonitorController::OnLockScreen() { 
-    if (io_) io_->sendLockCommand(true); 
-}
+> [!NOTE]
+> 移除 `#include "../model/Interface.h"`，改为只包含必要的数据类型定义。
 
-void MonitorController::OnUnlockScreen() { 
-    if (io_) io_->sendLockCommand(false); 
+#### [MODIFY] [RemoteControlViewDlg.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.cpp)
+
+**变更1**: 修改构造函数
+```diff
+- RemoteControlViewDlg::RemoteControlViewDlg(std::shared_ptr<INetworkModel> network,
+-                                            std::shared_ptr<IFileSystemModel> fileSystem,
+-                                            CWnd *pParent)
+-     : CDialogEx(IDD_MVC_MAIN_DIALOG, pParent),
+-       network_(network), fileSystem_(fileSystem) {
++ RemoteControlViewDlg::RemoteControlViewDlg(CWnd *pParent)
++     : CDialogEx(IDD_MVC_MAIN_DIALOG, pParent) {
+```
+
+**变更2**: 修改 [OnTreeItemExpanding](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/RemoteControlViewDlg.cpp#1021-1100) (第1020-1098行)
+
+移除直接调用Model的代码，改为委托给Controller：
+
+```diff
+void RemoteControlViewDlg::OnTreeItemExpanding(NMHDR *pNMHDR, LRESULT *pResult) {
+    // ... validation code ...
+    
+-   if (!fileSystem_) {
++   if (!controller_) {
+        TRACE(_T("  Error: controller_ is null\n"));
+        return;
+    }
+    
+    CT2A convPath(path);
+    std::string pathStr(static_cast<const char *>(convPath));
+-   HWND hWnd = GetSafeHwnd();
+-   
+-   auto isFirst = std::make_shared<bool>(true);
+-   fileSystem_->listDirectory(
+-       pathStr, [hWnd, hItem, pathStr, isFirst](...) { ... });
++   
++   // 委托给Controller处理
++   controller_->OnTreeNodeExpanding(static_cast<void*>(hItem), pathStr);
 }
 ```
 
 ---
 
-### Component 4: View 层
+### 组件4: View层重构 — MonitorViewDlg
+
+#### [MODIFY] [MonitorViewDlg.h](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.h)
+
+```diff
+class MonitorViewDlg : public CDialogEx {
+public:
+- explicit MonitorViewDlg(std::shared_ptr<IMonitorModel> monitor,
+-                         std::shared_ptr<IIoModel> io,
+-                         CWnd *pParent = nullptr);
++ explicit MonitorViewDlg(CWnd *pParent = nullptr);
+
+private:
+- // ---- Model接口 ----
+- std::shared_ptr<IMonitorModel> monitor_;
+- std::shared_ptr<IIoModel> io_;
+
+  // ---- Controller ----
+  std::shared_ptr<IMonitorController> controller_;
+};
+```
 
 #### [MODIFY] [MonitorViewDlg.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp)
 
-**修改 [OnSidebarLockScreen()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp#782-792) 方法**:
-```cpp
-void MonitorViewDlg::OnSidebarLockScreen() {
-    m_bScreenLocked = !m_bScreenLocked;
+修改构造函数，移除Model初始化。
 
-    if (controller_) {
-        if (m_bScreenLocked) {
-            controller_->OnLockScreen();
-        } else {
-            controller_->OnUnlockScreen();
-        }
-    }
+---
 
-    m_btnSidebarLock.SetWindowText(m_bScreenLocked ? _T("解锁屏幕") : _T("锁定屏幕"));
-    UpdateStatusBar(m_bScreenLocked ? "远程屏幕已锁定" : "远程屏幕已解锁", 0);
-}
-```
+### 组件5: 应用入口更新
 
-**优化 [WindowToRemote()](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/view/MonitorViewDlg.cpp#438-458) 坐标转换**:
+#### [MODIFY] [RemoteControl_Client.cpp](file:///d:/编程/项目/RemoteControl/RemoteControl_Client/RemoteControl_Client.cpp)
 
-当前实现已经处理了基本的坐标转换，但需要增强以下方面：
-1. 检测鼠标是否在有效画布区域内
-2. 处理窗口最小化或帧未加载时的边界情况
+```diff
+  // 4. Create View
+- RemoteControlViewDlg dlg(network, fileSystem);
++ RemoteControlViewDlg dlg;
+  m_pMainWnd = &dlg;
 
-```cpp
-CPoint MonitorViewDlg::WindowToRemote(CPoint pt) {
-    // 检查帧数据和画布有效性
-    if (!m_currentFrame || m_frameRect.IsRectEmpty())
-        return CPoint(-1, -1);  // 返回无效坐标
+  // 5. Create Controller
+  auto controller =
+      std::make_shared<MainController>(network, fileSystem, monitor, io, &dlg);
 
-    // 检查点击位置是否在画布区域内
-    if (!m_frameRect.PtInRect(pt))
-        return CPoint(-1, -1);  // 返回无效坐标表示点击在画布外
-
-    int frameW = m_frameRect.Width();
-    int frameH = m_frameRect.Height();
-    if (frameW <= 0 || frameH <= 0)
-        return CPoint(-1, -1);
-
-    // 计算缩放比例
-    float scaleX = (float)m_currentFrame->width / frameW;
-    float scaleY = (float)m_currentFrame->height / frameH;
-
-    // 转换坐标
-    int remoteX = (int)((pt.x - m_frameRect.left) * scaleX);
-    int remoteY = (int)((pt.y - m_frameRect.top) * scaleY);
-
-    // 边界检查 - 确保坐标在有效范围内
-    remoteX = std::clamp(remoteX, 0, (int)m_currentFrame->width - 1);
-    remoteY = std::clamp(remoteY, 0, (int)m_currentFrame->height - 1);
-
-    return CPoint(remoteX, remoteY);
-}
-```
-
-**修改鼠标事件处理以检查有效坐标**:
-
-需要修改各鼠标事件处理函数，检查返回的坐标是否有效：
-```cpp
-void MonitorViewDlg::OnMouseMove(UINT nFlags, CPoint point) {
-    if (controller_ && m_bMouseControlEnabled) {
-        CPoint remote = WindowToRemote(point);
-        if (remote.x >= 0 && remote.y >= 0) {  // 只有有效坐标才发送
-            controller_->OnMouseMove(remote.x, remote.y);
-        }
-    }
-    CDialogEx::OnMouseMove(nFlags, point);
-}
+  // 6. Inject Controller into View
+  dlg.SetController(controller);
 ```
 
 ---
 
-## Verification Plan
+## 验证计划
 
 ### 编译测试
-1. 在 Visual Studio 中打开解决方案 `RemoteControl.sln`
-2. 重新生成 `RemoteControl_Client` 项目
-3. 确认无编译错误
+
+```powershell
+# 在 Visual Studio Developer Command Prompt 中执行
+cd d:\编程\项目\RemoteControl
+msbuild RemoteControl.sln /p:Configuration=Debug /p:Platform=x64 /t:Rebuild
+```
+
+**预期结果**: 编译成功，无错误。
 
 ### 手动功能验证
 
-#### 验证锁机/解锁功能
-1. 启动服务端程序 (`RemoteControl_Server`)
-2. 启动客户端程序 (`RemoteControl_Client`)
-3. 连接到服务端
-4. 点击"开始监视"按钮打开监控窗口
-5. 在监控窗口侧边栏点击"锁定屏幕"按钮
-6. 观察：
-   - 按钮文字变为"解锁屏幕"
-   - 状态栏显示"远程屏幕已锁定"
-   - 服务端控制台输出锁机相关日志
-7. 再次点击"解锁屏幕"按钮
-8. 观察：
-   - 按钮文字恢复为"锁定屏幕"
-   - 状态栏显示"远程屏幕已解锁"
-   - 服务端控制台输出解锁相关日志
+由于这是MFC桌面应用，需要手动验证：
 
-#### 验证鼠标坐标映射  
-1. 在监控窗口中启用"鼠标操作"（点击侧边栏按钮）
-2. 在监控画面区域移动鼠标
-3. 观察服务端鼠标是否跟随正确移动
-4. 测试画布边缘的鼠标操作，确认不会发送无效坐标
-5. 调整窗口大小后重复测试，确认坐标仍然正确
+1. **启动客户端应用程序**
+2. **测试连接功能**: 输入IP和端口，点击"连接"按钮
+3. **测试文件浏览**: 
+   - 确认驱动器列表正常显示
+   - 点击展开驱动器节点，确认子目录正常加载
+   - 选择目录后右侧文件列表正常显示
+4. **测试监视功能**: 点击"屏幕监视"按钮，确认监视窗口正常打开
 
-> [!IMPORTANT]
-> 由于这是 MFC Windows 桌面应用，需要用户手动编译和测试。测试需要同时运行服务端和客户端程序。
+> [!TIP]
+> 如果您有特定的测试脚本或自动化测试框架，请告知，我可以调整验证计划。
+
+---
+
+## 重构前后对比
+
+| 指标 | 重构前 | 重构后 |
+|------|--------|--------|
+| View持有的Model引用 | 4个 | 0个 |
+| View直接调用Model | 1处 | 0处 |
+| View头文件包含Model接口 | ✗ | ✓ 移除 |
+| Controller接口方法 | 11个 | 12个 (+1) |
+
+---
+
+## 文件变更摘要
+
+| 文件 | 操作 | 影响范围 |
+|------|------|----------|
+| [IController.h](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/mvc/controller/IController.h) | 新增方法 | 接口变更 |
+| `MainController.h/cpp` | 实现新方法 | 内部实现 |
+| `RemoteControlViewDlg.h/cpp` | 移除Model依赖 | 构造函数签名变更 |
+| `MonitorViewDlg.h/cpp` | 移除Model依赖 | 构造函数签名变更 |
+| [RemoteControl_Client.cpp](file:///d:/%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE/RemoteControl/RemoteControl_Client/RemoteControl_Client.cpp) | 更新View创建 | 初始化流程 |

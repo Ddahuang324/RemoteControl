@@ -36,6 +36,9 @@ public:
   // 用户双击了某个目录(展开子目录)
   virtual void OnDirectoryExpanded(const std::string &path) = 0;
 
+  // 当树节点需要展开并加载子目录时（View 提供 HTREEITEM 句柄）
+  virtual void OnTreeNodeExpanding(void* hTreeItem, const std::string &path) = 0;
+
   // ---- 文件操作 ----
   // 下载文件: remotePath为服务器路径, localPath为本地保存路径
   virtual void OnFileDownload(const std::string &remotePath,

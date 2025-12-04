@@ -1,9 +1,9 @@
 ﻿#include "pch.h"
 #include "RemoteControlViewDlg.h"
 #include "afxdialogex.h"
+
 #include <algorithm>
 #include <sstream>
-
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -14,14 +14,17 @@
 // 鏋勯€犱笌鏋愭瀯
 // ============================================================================
 
-RemoteControlViewDlg::RemoteControlViewDlg(
-    std::shared_ptr<INetworkModel> network,
-    std::shared_ptr<IFileSystemModel> fileSystem, CWnd *pParent)
-    : CDialogEx(IDD_MVC_MAIN_DIALOG, pParent), network_(network),
-      fileSystem_(fileSystem), controller_(nullptr), m_bConnected(false),
-      m_bMonitoring(false), m_bFileListCleared(true) {
-  // 鏆傛椂浣跨敤榛樿鍥炬爣锛岀◢鍚庢坊鍔犲簲鐢ㄧ▼搴忓浘鏍?
-  m_hIcon = nullptr;
+RemoteControlViewDlg::RemoteControlViewDlg(CWnd *pParent)
+  : CDialogEx(IDD_MVC_MAIN_DIALOG, pParent), controller_(nullptr) {
+  // 初始化 ViewProtocol 容器并迁移旧状态
+  m_protocol = std::make_unique<ViewProtocol::MainViewProtocol>();
+  m_protocol->state->isConnected = false;
+  m_protocol->state->isMonitoring = false;
+  m_protocol->state->isFileListCleared = true;
+  m_protocol->state->currentPath = _T("");
+  m_protocol->state->selectedFile = _T("");
+  m_protocol->state->lastSelectedPath = _T("");
+  m_protocol->sysRes->hIcon = nullptr;
 }
 
 RemoteControlViewDlg::~RemoteControlViewDlg() {
@@ -190,53 +193,65 @@ BOOL RemoteControlViewDlg::OnInitDialog() {
   MoveWindow((screenW - windowW) / 2, (screenH - windowH) / 2, windowW, windowH,
              FALSE);
 
-  // 记录初始客户区大小(用于后续基于初始布局的差量计算)
-  GetClientRect(&m_rcOriginalRect);
+  // 记录初始客户区大小到协议容器
+  if (m_protocol && m_protocol->layout) {
+    GetClientRect(&m_protocol->layout->originalDialogRect);
 
-  // 定义布局规则（锚点）
-  m_layoutRules.clear();
-  // 连接区域 group：左右拉伸，高度固定
-  m_layoutRules.push_back({IDC_MVC_GROUP_CONNECTION, true, true, true, false});
-  // 连接区域内部控件：左上锚定，不随右侧移动
-  m_layoutRules.push_back({IDC_MVC_STATIC_IP, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_IPADDRESS, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_STATIC_PORT, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_EDIT_PORT, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_BTN_CONNECT, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_STATIC_STATUS, true, true, false, false});
-  m_layoutRules.push_back({IDC_MVC_LED_STATUS, true, true, false, false});
+    // 定义布局规则（锚点） - 存入协议
+    m_protocol->layout->rules.clear();
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_GROUP_CONNECTION, true, true, true, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_STATIC_IP, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_IPADDRESS, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_STATIC_PORT, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_EDIT_PORT, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_CONNECT, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_STATIC_STATUS, true, true, false, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_LED_STATUS, true, true, false, false});
 
-  // 文件区域 group：左右+上下拉伸（随窗口垂直增长）
-  m_layoutRules.push_back({IDC_MVC_GROUP_FILES, true, true, true, true});
-  // 树控件：左+上下（垂直拉伸）
-  m_layoutRules.push_back({IDC_MVC_TREE_DRIVES, true, true, false, true});
-  // 路径编辑：左右+上（只水平拉伸）
-  m_layoutRules.push_back({IDC_MVC_EDIT_PATH, true, true, true, false});
-  // 文件列表：左右+上下（完全拉伸）
-  m_layoutRules.push_back({IDC_MVC_LIST_FILES, true, true, true, true});
-  // 文件操作按钮：左+下锚定（底部对齐）
-  m_layoutRules.push_back({IDC_MVC_BTN_REFRESH, true, false, false, true});
-  m_layoutRules.push_back({IDC_MVC_BTN_UPLOAD, true, false, false, true});
-  m_layoutRules.push_back({IDC_MVC_BTN_DOWNLOAD, true, false, false, true});
-  m_layoutRules.push_back({IDC_MVC_BTN_DELETE, true, false, false, true});
-  m_layoutRules.push_back({IDC_MVC_BTN_RUN, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_GROUP_FILES, true, true, true, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_TREE_DRIVES, true, true, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_EDIT_PATH, true, true, true, false});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_LIST_FILES, true, true, true, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_REFRESH, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_UPLOAD, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_DOWNLOAD, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_DELETE, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_RUN, true, false, false, true});
 
-  // 监视区域 group：左右+下，高度固定
-  m_layoutRules.push_back({IDC_MVC_GROUP_MONITOR, true, false, true, true});
-  // 监视按钮：左+下
-  m_layoutRules.push_back(
-      {IDC_MVC_BTN_START_MONITOR, true, false, false, true});
-  m_layoutRules.push_back({IDC_MVC_BTN_START_RECORD, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_GROUP_MONITOR, true, false, true, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_START_MONITOR, true, false, false, true});
+    m_protocol->layout->rules.push_back(
+        {IDC_MVC_BTN_START_RECORD, true, false, false, true});
 
-  // 记录所有受控件的初始 Rect
-  m_originalControlRects.clear();
-  for (const auto &rule : m_layoutRules) {
-    CWnd *pWnd = GetDlgItem(rule.nID);
-    if (pWnd && pWnd->GetSafeHwnd()) {
-      CRect r;
-      pWnd->GetWindowRect(&r);
-      ScreenToClient(&r);
-      m_originalControlRects[rule.nID] = r;
+    // 记录所有受控件的初始 Rect
+    m_protocol->layout->originalRects.clear();
+    for (const auto &rule : m_protocol->layout->rules) {
+      CWnd *pWnd = GetDlgItem(rule.nID);
+      if (pWnd && pWnd->GetSafeHwnd()) {
+        CRect r;
+        pWnd->GetWindowRect(&r);
+        ScreenToClient(&r);
+        m_protocol->layout->originalRects[rule.nID] = r;
+      }
     }
   }
 
@@ -275,7 +290,9 @@ LRESULT RemoteControlViewDlg::OnUpdateFileList(WPARAM wParam, LPARAM lParam) {
   // 如果 wParam 为 0，表示这是目录切换的开始，需要重置清空标记
   // 我们不立即清空列表，而是等到第一批数据到达时再清空，以避免闪烁
   if (wParam == 0) {
-    m_bFileListCleared = false;
+    if (m_protocol && m_protocol->state) {
+      m_protocol->state->isFileListCleared = false;
+    }
     return 0;
   }
 
@@ -441,7 +458,8 @@ void RemoteControlViewDlg::SetController(
 // ============================================================================
 
 void RemoteControlViewDlg::UpdateConnectionStatus(bool connected) {
-  m_bConnected = connected;
+  if (m_protocol && m_protocol->state)
+    m_protocol->state->isConnected = connected;
 
   // 鏇存柊鎸夐挳鏂囨湰
   if (m_btnConnect.GetSafeHwnd()) {
@@ -515,9 +533,10 @@ void RemoteControlViewDlg::UpdateFileList(
     const std::vector<FileSystemProtocol::FileEntry> &files) {
 
   // 如果这是新目录的第一批数据，清空列表
-  if (!m_bFileListCleared) {
+  if (m_protocol && m_protocol->state &&
+      !m_protocol->state->isFileListCleared) {
     m_listFiles.DeleteAllItems();
-    m_bFileListCleared = true;
+    m_protocol->state->isFileListCleared = true;
   }
 
   // m_listFiles.DeleteAllItems();
@@ -647,31 +666,35 @@ void RemoteControlViewDlg::UpdateTransferProgress(int percent,
 
 void RemoteControlViewDlg::UpdateButtonStates() {
   // 鏂囦欢鎿嶄綔鎸夐挳鍙湁鍦ㄨ繛鎺ユ椂鎵嶅惎鐢?
+  bool connected = (m_protocol && m_protocol->state)
+                       ? m_protocol->state->isConnected
+                       : false;
+  bool hasSelection = (m_protocol && m_protocol->state)
+                          ? !m_protocol->state->selectedFile.IsEmpty()
+                          : false;
   if (m_btnRefresh.GetSafeHwnd())
-    m_btnRefresh.EnableWindow(m_bConnected);
+    m_btnRefresh.EnableWindow(connected);
   if (m_btnUpload.GetSafeHwnd())
-    m_btnUpload.EnableWindow(m_bConnected);
+    m_btnUpload.EnableWindow(connected);
   if (m_btnDownload.GetSafeHwnd())
-    m_btnDownload.EnableWindow(m_bConnected && !m_strSelectedFile.IsEmpty());
+    m_btnDownload.EnableWindow(connected && hasSelection);
   if (m_btnDelete.GetSafeHwnd())
-    m_btnDelete.EnableWindow(m_bConnected && !m_strSelectedFile.IsEmpty());
+    m_btnDelete.EnableWindow(connected && hasSelection);
   if (m_btnRun.GetSafeHwnd())
-    m_btnRun.EnableWindow(m_bConnected && !m_strSelectedFile.IsEmpty());
+    m_btnRun.EnableWindow(connected && hasSelection);
 
   // 鐩戣鎸夐挳鍙湁鍦ㄨ繛鎺ユ椂鎵嶅惎鐢?
   if (m_btnStartMonitor.GetSafeHwnd())
-    m_btnStartMonitor.EnableWindow(m_bConnected);
+    m_btnStartMonitor.EnableWindow(connected);
   if (m_btnStartRecord.GetSafeHwnd())
-    m_btnStartRecord.EnableWindow(m_bConnected);
+    m_btnStartRecord.EnableWindow(connected);
 
   // 宸ュ叿鏍忔寜閽?
   if (m_toolbar.GetSafeHwnd()) {
-    m_toolbar.GetToolBarCtrl().EnableButton(ID_MVC_TOOLBAR_CONNECT,
-                                            !m_bConnected);
+    m_toolbar.GetToolBarCtrl().EnableButton(ID_MVC_TOOLBAR_CONNECT, !connected);
     m_toolbar.GetToolBarCtrl().EnableButton(ID_MVC_TOOLBAR_DISCONNECT,
-                                            m_bConnected);
-    m_toolbar.GetToolBarCtrl().EnableButton(ID_MVC_TOOLBAR_REFRESH,
-                                            m_bConnected);
+                                            connected);
+    m_toolbar.GetToolBarCtrl().EnableButton(ID_MVC_TOOLBAR_REFRESH, connected);
   }
 }
 
@@ -722,7 +745,11 @@ void RemoteControlViewDlg::OnPaint() {
     int x = (rect.Width() - cxIcon + 1) / 2;
     int y = (rect.Height() - cyIcon + 1) / 2;
 
-    dc.DrawIcon(x, y, m_hIcon);
+    HICON hIcon = (m_protocol && m_protocol->sysRes) ? m_protocol->sysRes->hIcon
+                                                     : nullptr;
+    if (hIcon) {
+      dc.DrawIcon(x, y, hIcon);
+    }
 
     // 缁樺埗鐘舵€佹寚绀虹伅 (閫氳繃 GetDlgItem 瀹夊叏璁块棶锛岄伩鍏?DDX_Control
     // 瀛愮被鍖栨柇瑷€)
@@ -731,7 +758,10 @@ void RemoteControlViewDlg::OnPaint() {
       CRect ledRect;
       pLed->GetWindowRect(&ledRect);
       ScreenToClient(&ledRect);
-      DrawStatusLED(&dc, ledRect, m_bConnected);
+      bool connected = (m_protocol && m_protocol->state)
+                           ? m_protocol->state->isConnected
+                           : false;
+      DrawStatusLED(&dc, ledRect, connected);
     }
   } else {
     CDialogEx::OnPaint();
@@ -739,7 +769,9 @@ void RemoteControlViewDlg::OnPaint() {
 }
 
 HCURSOR RemoteControlViewDlg::OnQueryDragIcon() {
-  return static_cast<HCURSOR>(m_hIcon);
+  HICON hIcon =
+      (m_protocol && m_protocol->sysRes) ? m_protocol->sysRes->hIcon : nullptr;
+  return static_cast<HCURSOR>(hIcon);
 }
 
 void RemoteControlViewDlg::OnSize(UINT nType, int cx, int cy) {
@@ -760,7 +792,8 @@ void RemoteControlViewDlg::OnSize(UINT nType, int cx, int cy) {
     return;
 
   // 如果没有记录初始控件信息，则不做自动调整
-  if (m_originalControlRects.empty())
+  if (!(m_protocol && m_protocol->layout) ||
+      m_protocol->layout->originalRects.empty())
     return;
 
   // 使用基于初始布局的差量调整控件位置和大小
@@ -770,14 +803,15 @@ void RemoteControlViewDlg::OnSize(UINT nType, int cx, int cy) {
 }
 
 void RemoteControlViewDlg::AdjustControlLayout(int cx, int cy) {
-  // 基于 m_rcOriginalRect 和 m_originalControlRects 计算新矩形
-  int diffX = cx - m_rcOriginalRect.Width();
-  int diffY = cy - m_rcOriginalRect.Height();
+  if (!(m_protocol && m_protocol->layout))
+    return;
 
-  // 使用 DeferWindowPos 会更高效，但这里用简单 MoveWindow
-  for (const auto &rule : m_layoutRules) {
-    auto it = m_originalControlRects.find(rule.nID);
-    if (it == m_originalControlRects.end())
+  int diffX = cx - m_protocol->layout->originalDialogRect.Width();
+  int diffY = cy - m_protocol->layout->originalDialogRect.Height();
+
+  for (const auto &rule : m_protocol->layout->rules) {
+    auto it = m_protocol->layout->originalRects.find(rule.nID);
+    if (it == m_protocol->layout->originalRects.end())
       continue;
 
     bool isGroup =
@@ -790,35 +824,32 @@ void RemoteControlViewDlg::AdjustControlLayout(int cx, int cy) {
     int newRight = orig.right;
     int newBottom = orig.bottom;
 
-    // Group 只做整体拉伸/平移，不改内部控件布局
     if (isGroup) {
-      if (rule.anchorLeft && rule.anchorRight) {
+      if (rule.left && rule.right) {
         newRight = orig.right + diffX;
       }
-      if (rule.anchorTop && rule.anchorBottom) {
+      if (rule.top && rule.bottom) {
         newBottom = orig.bottom + diffY;
-      } else if (!rule.anchorTop && rule.anchorBottom) {
+      } else if (!rule.top && rule.bottom) {
         newTop = orig.top + diffY;
         newBottom = orig.bottom + diffY;
       }
     } else {
-      // 普通控件：根据锚点规则调整
-      if (rule.anchorLeft && rule.anchorRight) {
+      if (rule.left && rule.right) {
         newRight = orig.right + diffX;
-      } else if (!rule.anchorLeft && rule.anchorRight) {
+      } else if (!rule.left && rule.right) {
         newLeft = orig.left + diffX;
         newRight = orig.right + diffX;
       }
 
-      if (rule.anchorTop && rule.anchorBottom) {
+      if (rule.top && rule.bottom) {
         newBottom = orig.bottom + diffY;
-      } else if (!rule.anchorTop && rule.anchorBottom) {
+      } else if (!rule.top && rule.bottom) {
         newTop = orig.top + diffY;
         newBottom = orig.bottom + diffY;
       }
     }
 
-    // 应用新位置
     CWnd *pWnd = GetDlgItem(rule.nID);
     if (pWnd && pWnd->GetSafeHwnd()) {
       CRect newRect(newLeft, newTop, newRight, newBottom);
@@ -850,7 +881,10 @@ void RemoteControlViewDlg::OnBnClickedConnect() {
   if (!controller_)
     return;
 
-  if (!m_bConnected) {
+  bool connected = (m_protocol && m_protocol->state)
+                       ? m_protocol->state->isConnected
+                       : false;
+  if (!connected) {
     // 鑾峰彇IP
     std::string ip = "127.0.0.1";
     if (m_ipAddress.GetSafeHwnd()) {
@@ -896,7 +930,8 @@ void RemoteControlViewDlg::OnBnClickedRefresh() {
     CString path = GetTreeItemPath(hItem);
     if (!path.IsEmpty() && path != _T("驱动器")) {
       // 娓呴櫎闃叉姈缂撳瓨,寮哄埗閲嶆柊鍔犺浇
-      m_strLastSelectedPath = _T("");
+      if (m_protocol && m_protocol->state)
+        m_protocol->state->lastSelectedPath = _T("");
 
       // 閲嶆柊鍔犺浇褰撳墠鐩綍鐨勬枃浠跺垪琛?
       controller_->OnDirectorySelected(std::string(CT2A(path)));
@@ -946,8 +981,10 @@ void RemoteControlViewDlg::OnTreeSelChanged(NMHDR *pNMHDR, LRESULT *pResult) {
   }
 
   // 鏇存柊褰撳墠璺緞
-  m_strCurrentPath = path;
-  m_strLastSelectedPath = path;
+  if (m_protocol && m_protocol->state) {
+    m_protocol->state->currentPath = path;
+    m_protocol->state->lastSelectedPath = path;
+  }
   m_editPath.SetWindowText(path);
 
   // 娉ㄦ剰锛氫笉璁剧疆
@@ -1017,45 +1054,15 @@ void RemoteControlViewDlg::OnTreeItemExpanding(NMHDR *pNMHDR,
     return;
   }
 
-  // 楠岃瘉 fileSystem_ Model 鏄惁鏈夋晥
-  if (!fileSystem_) {
-    TRACE(_T("  Error: fileSystem_ is null\n"));
+  // 委托给 Controller 处理子目录加载
+  if (!controller_) {
+    TRACE(_T("  Error: controller_ is null\n"));
     return;
   }
 
-  // 鏄惧紡浣跨敤 CT2A
-  // 杞崲瀵硅薄浠ラ伩鍏嶇紪璇戝櫒灏?CT2A
-  // 瑙ｆ瀽涓哄嚱鏁伴噸杞?
   CT2A convPath(path);
   std::string pathStr(static_cast<const char *>(convPath));
-  HWND hWnd = GetSafeHwnd();
-
-  // 寮傛鍔犺浇瀛愮洰褰曪紝鍦ㄥ洖璋冧腑浣跨敤 PostMessage
-  // 鏇存柊 UI
-  // 使用 shared_ptr 来在多次回调间共享 isFirst 状态
-  auto isFirst = std::make_shared<bool>(true);
-
-  fileSystem_->listDirectory(
-      pathStr, [hWnd, hItem, pathStr, isFirst](
-                   const std::vector<FileSystemProtocol::FileEntry> &entries,
-                   bool hasMore) {
-        // 楠岃瘉绐楀彛鏄惁浠嶇劧鏈夋晥
-        if (!::IsWindow(hWnd)) {
-          return;
-        }
-
-        // 鍒涘缓鏁版嵁缁撴瀯锛屽寘鍚?HTREEITEM 鍙ユ焺
-        // 娉ㄦ剰锛歨Item
-        // 鍙兘鍦ㄥ洖璋冩墽琛屾椂宸插け鏁堬紝鎴戜滑灏嗗湪
-        // OnUpdateSubDirs 涓獙璇?
-        auto *pData = new SubDirUpdateData();
-        pData->hParent = hItem;
-        pData->entries = entries;
-        pData->isFirst = *isFirst;
-        *isFirst = false; // 后续回调不再是第一批
-
-        ::PostMessage(hWnd, WM_UPDATE_SUB_DIRS, (WPARAM)pData, 0);
-      });
+  controller_->OnTreeNodeExpanding(static_cast<void *>(hItem), pathStr);
 }
 
 void RemoteControlViewDlg::OnListRightClick(NMHDR *pNMHDR, LRESULT *pResult) {
@@ -1068,9 +1075,9 @@ void RemoteControlViewDlg::OnListRightClick(NMHDR *pNMHDR, LRESULT *pResult) {
     return;
 
   int nItem = m_listFiles.GetNextSelectedItem(pos);
-  m_strSelectedFile = m_listFiles.GetItemText(nItem, 0);
-
-  // 鏇存柊鎸夐挳鐘舵€?
+  if (m_protocol && m_protocol->state) {
+    m_protocol->state->selectedFile = m_listFiles.GetItemText(nItem, 0);
+  }
   UpdateButtonStates();
 
   // 鏄剧ず鍙抽敭鑿滃崟
@@ -1103,7 +1110,10 @@ void RemoteControlViewDlg::OnBnClickedUpload() {
 
   if (dlg.DoModal() == IDOK) {
     CString localPath = dlg.GetPathName();
-    CString remotePath = m_strCurrentPath + _T("\\") + dlg.GetFileName();
+    CString remotePath =
+        (m_protocol && m_protocol->state)
+            ? (m_protocol->state->currentPath + _T("\\") + dlg.GetFileName())
+            : CString();
 
     controller_->OnFileUpload(std::string(CT2A(localPath)),
                               std::string(CT2A(remotePath)));
@@ -1118,15 +1128,21 @@ void RemoteControlViewDlg::OnBnClickedRun() { OnMenuRun(); }
 
 // 鍙抽敭鑿滃崟
 void RemoteControlViewDlg::OnMenuDownload() {
-  if (!controller_ || m_strSelectedFile.IsEmpty())
+  if (!controller_ || !(m_protocol && m_protocol->state) ||
+      m_protocol->state->selectedFile.IsEmpty())
     return;
 
-  CFileDialog dlg(FALSE, NULL, m_strSelectedFile,
-                  OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
-                  _T("所有文件 (*.*)|*.*||"), this);
+  CFileDialog dlg(
+      FALSE, NULL,
+      (m_protocol && m_protocol->state) ? m_protocol->state->selectedFile
+                                        : CString(),
+      OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, _T("所有文件 (*.*)|*.*||"), this);
 
   if (dlg.DoModal() == IDOK) {
-    CString remotePath = m_strCurrentPath + _T("\\") + m_strSelectedFile;
+    CString remotePath = (m_protocol && m_protocol->state)
+                             ? (m_protocol->state->currentPath + _T("\\") +
+                                m_protocol->state->selectedFile)
+                             : CString();
     CString localPath = dlg.GetPathName();
 
     controller_->OnFileDownload(std::string(CT2A(remotePath)),
@@ -1137,23 +1153,33 @@ void RemoteControlViewDlg::OnMenuDownload() {
 void RemoteControlViewDlg::OnMenuUpload() { OnBnClickedUpload(); }
 
 void RemoteControlViewDlg::OnMenuDelete() {
-  if (!controller_ || m_strSelectedFile.IsEmpty())
+  if (!controller_ || !(m_protocol && m_protocol->state) ||
+      m_protocol->state->selectedFile.IsEmpty())
     return;
 
   CString msg;
-  msg.Format(_T("是否确定删除文件 '%s' ?"), (LPCTSTR)m_strSelectedFile);
+  msg.Format(_T("是否确定删除文件 '%s' ?"),
+             (LPCTSTR)((m_protocol && m_protocol->state)
+                           ? m_protocol->state->selectedFile
+                           : CString()));
 
   if (MessageBox(msg, _T("确认删除"), MB_YESNO | MB_ICONQUESTION) == IDYES) {
-    CString remotePath = m_strCurrentPath + _T("\\") + m_strSelectedFile;
+    CString remotePath = (m_protocol && m_protocol->state)
+                             ? (m_protocol->state->currentPath + _T("\\") +
+                                m_protocol->state->selectedFile)
+                             : CString();
     controller_->OnFileDelete(std::string(CT2A(remotePath)));
   }
 }
 
 void RemoteControlViewDlg::OnMenuRun() {
-  if (!controller_ || m_strSelectedFile.IsEmpty())
+  if (!controller_ || !(m_protocol && m_protocol->state) ||
+      m_protocol->state->selectedFile.IsEmpty())
     return;
-
-  CString remotePath = m_strCurrentPath + _T("\\") + m_strSelectedFile;
+  CString remotePath = (m_protocol && m_protocol->state)
+                           ? (m_protocol->state->currentPath + _T("\\") +
+                              m_protocol->state->selectedFile)
+                           : CString();
   controller_->OnFileRun(std::string(CT2A(remotePath)));
 }
 
@@ -1166,16 +1192,19 @@ void RemoteControlViewDlg::OnBnClickedStartMonitor() {
   if (!controller_)
     return;
 
-  if (!m_bMonitoring) {
-    // 启动监视
+  bool monitoring = (m_protocol && m_protocol->state)
+                        ? m_protocol->state->isMonitoring
+                        : false;
+  if (!monitoring) {
     controller_->OnStartMonitor();
-    m_bMonitoring = true;
+    if (m_protocol && m_protocol->state)
+      m_protocol->state->isMonitoring = true;
     m_btnStartMonitor.SetWindowText(_T("停止监视"));
     UpdateStatusBar("屏幕监视已启动", 0);
   } else {
-    // 停止监视
     controller_->OnStopMonitor();
-    m_bMonitoring = false;
+    if (m_protocol && m_protocol->state)
+      m_protocol->state->isMonitoring = false;
     m_btnStartMonitor.SetWindowText(_T("屏幕监视"));
     UpdateStatusBar("屏幕监视已停止", 0);
   }

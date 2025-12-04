@@ -83,7 +83,7 @@ BOOL CRemoteControlClientApp::InitInstance() {
   monitor->setIoModel(io);
 
   // 4. Create View
-  RemoteControlViewDlg dlg(network, fileSystem);
+  RemoteControlViewDlg dlg;
   m_pMainWnd = &dlg;
 
   // 5. Create Controller

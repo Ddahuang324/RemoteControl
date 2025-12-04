@@ -1,8 +1,9 @@
 #pragma once
 
-#include "../interfaces/IController.h"
+#include "../controller/IController.h"
 #include "../model/Interface.h"
 #include "../view/RemoteControlViewDlg.h"
+#include "../../include/Protocol/MVC/controller/ControllerProtocol.h"
 #include <memory>
 #include <string>
 
@@ -30,6 +31,7 @@ public:
   void OnRefreshDrives() override;
   void OnDirectorySelected(const std::string &path) override;
   void OnDirectoryExpanded(const std::string &path) override;
+  void OnTreeNodeExpanding(void* hTreeItem, const std::string &path) override;
   void OnFileDownload(const std::string &remotePath,
                       const std::string &localPath) override;
   void OnFileUpload(const std::string &localPath,
@@ -40,16 +42,9 @@ public:
   void OnStopMonitor() override;
 
 private:
-  // ---- Model接口 ----
-  std::shared_ptr<INetworkModel> network_;
-  std::shared_ptr<IFileSystemModel> fileSystem_;
-  std::shared_ptr<IMonitorModel> monitor_;
-  std::shared_ptr<IIoModel> io_;
+  // 协议容器，集中管理 Controller 所需的资源与状态
+  std::unique_ptr<ControllerProtocol::MainControllerProtocol> m_protocol;
 
-  // ---- View ----
-  RemoteControlViewDlg *view_; // 原始指针,生命周期由MFC管理
-
-  // ---- 监视窗口 ----
-  MonitorViewDlg *monitorView_;
+  // 监视窗口的 Controller（类型依赖具体实现）
   std::shared_ptr<MonitorController> monitorController_;
 };
