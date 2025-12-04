@@ -2,6 +2,7 @@
 #include "IOModel.h"
 #include "../../Enities.h"
 #include "../../include/Infra/Packet.hpp"
+#include "../../include/Protocol/Infra/PacketProtocol.h"
 #include <iostream>
 
 IOModel::IOModel(std::shared_ptr<INetworkModel> net) : net_(std::move(net)) {}
@@ -41,4 +42,21 @@ void IOModel::injectKey(int keycode, bool down) {
   // 回退：目前没有定义的 key 注入格式，保留为 no-op
   (void)keycode;
   (void)down;
+}
+
+void IOModel::sendLockCommand(bool lock) {
+  if (!net_)
+    return;
+
+  try {
+    Packet pkt;
+    pkt.sCmd = static_cast<WORD>(lock ? CMD_LOCK_MACHINE : CMD_UNLOCK_MACHINE);
+    pkt.data.clear();
+    net_->sendPacket(pkt);
+  } catch (const std::exception &e) {
+    std::cerr << "IOModel::sendLockCommand exception: " << e.what()
+              << std::endl;
+  } catch (...) {
+    std::cerr << "IOModel::sendLockCommand unknown exception" << std::endl;
+  }
 }

@@ -85,3 +85,11 @@ void MonitorController::OnSetZoom(float scale) { /* view handles zoom */ }
 void MonitorController::OnFitToWindow() { /* view handles fit */ }
 
 void MonitorController::OnActualSize() { /* view handles actual size */ }
+
+void MonitorController::OnLockScreen() {
+    if (io_) io_->sendLockCommand(true);
+}
+
+void MonitorController::OnUnlockScreen() {
+    if (io_) io_->sendLockCommand(false);
+}

@@ -7,14 +7,13 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
-#include <map>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-
 
 // InterfaceProtocol: 资源容器，供 IModel 及其派生类使用
 // 全局 FrameData 结构：用于在 Model/View 之间传递帧数据（RGBA 或 压缩载荷）
@@ -113,6 +112,7 @@ struct MonitorProtocol {
     std::shared_ptr<IDecoder> decoder;
     std::thread netThread;
     std::thread decodeThread;
+    std::thread requestThread;
     std::vector<uint8_t> canvas;
     int canvasW = 0;
     int canvasH = 0;
@@ -175,4 +175,3 @@ struct FileSystemProtocol {
   std::unique_ptr<FileBuffer> m_fileBuffer;
   std::unique_ptr<FilePacketData> m_filePacketData;
 };
-

@@ -12,6 +12,7 @@ public:
 
     void injectMouse(int x, int y, int button, bool down) override;
     void injectKey(int keycode, bool down) override;
+    void sendLockCommand(bool lock) override;
 
 private:
     std::shared_ptr<INetworkModel> net_;

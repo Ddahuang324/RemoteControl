@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 
-
 // ============================================================================
 // Controller接口定义
 // 职责: 协调Model和View之间的交互,处理业务逻辑
@@ -55,6 +54,9 @@ public:
   // ---- 监视功能 ----
   // 启动屏幕监视(创建并显示监视窗口)
   virtual void OnStartMonitor() = 0;
+
+  // 停止屏幕监视(关闭监视窗口并清理资源)
+  virtual void OnStopMonitor() = 0;
 };
 
 // ----------------------------------------------------------------------------
@@ -110,4 +112,8 @@ public:
 
   // 原始大小
   virtual void OnActualSize() = 0;
+
+  // 锁定/解锁远程屏幕
+  virtual void OnLockScreen() = 0;
+  virtual void OnUnlockScreen() = 0;
 };

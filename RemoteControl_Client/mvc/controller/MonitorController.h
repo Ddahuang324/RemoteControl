@@ -27,6 +27,8 @@ public:
     void OnSetZoom(float scale) override;
     void OnFitToWindow() override;
     void OnActualSize() override;
+    void OnLockScreen() override;
+    void OnUnlockScreen() override;
     // 将 View 的 HWND 注册到 Controller，Controller 会将 Model 的帧回调
     // 转发到该 HWND（通过 PostMessage）。可以传入 nullptr 来注销。
     void attachView(HWND hwnd);

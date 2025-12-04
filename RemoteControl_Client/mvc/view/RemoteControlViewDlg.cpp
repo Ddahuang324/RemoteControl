@@ -1,9 +1,9 @@
 ﻿#include "pch.h"
 #include "RemoteControlViewDlg.h"
 #include "afxdialogex.h"
-
-
+#include <algorithm>
 #include <sstream>
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -19,7 +19,7 @@ RemoteControlViewDlg::RemoteControlViewDlg(
     std::shared_ptr<IFileSystemModel> fileSystem, CWnd *pParent)
     : CDialogEx(IDD_MVC_MAIN_DIALOG, pParent), network_(network),
       fileSystem_(fileSystem), controller_(nullptr), m_bConnected(false),
-      m_bFileListCleared(true) {
+      m_bMonitoring(false), m_bFileListCleared(true) {
   // 鏆傛椂浣跨敤榛樿鍥炬爣锛岀◢鍚庢坊鍔犲簲鐢ㄧ▼搴忓浘鏍?
   m_hIcon = nullptr;
 }
@@ -87,6 +87,7 @@ ON_WM_SYSCOMMAND()
 ON_WM_PAINT()
 ON_WM_QUERYDRAGICON()
 ON_WM_SIZE()
+ON_WM_GETMINMAXINFO()
 ON_MESSAGE(WM_APP + 0x100, &RemoteControlViewDlg::OnNetworkStatusChanged)
 ON_MESSAGE(WM_UPDATE_DRIVE_LIST, &RemoteControlViewDlg::OnUpdateDriveList)
 ON_MESSAGE(WM_UPDATE_FILE_LIST, &RemoteControlViewDlg::OnUpdateFileList)
@@ -173,8 +174,71 @@ BOOL RemoteControlViewDlg::OnInitDialog() {
   // 鍒濆鍖栨寜閽姸鎬?
   UpdateButtonStates();
 
-  // 璁剧疆鐘舵€佹爮鍒濆鏂囨湰
-  UpdateStatusBar("就绪", 0);
+  // Set initial status bar text
+  // TODO: restore localized string if needed
+  UpdateStatusBar("Ready", 0);
+
+  // ===== 响应式布局初始化 =====
+  // 获取对话框初始大小并居中显示
+  int screenW = GetSystemMetrics(SM_CXSCREEN);
+  int screenH = GetSystemMetrics(SM_CYSCREEN);
+  CRect rcWindow;
+  GetWindowRect(&rcWindow);
+  int windowW = rcWindow.Width();
+  int windowH = rcWindow.Height();
+  // 将窗口居中于屏幕
+  MoveWindow((screenW - windowW) / 2, (screenH - windowH) / 2, windowW, windowH,
+             FALSE);
+
+  // 记录初始客户区大小(用于后续基于初始布局的差量计算)
+  GetClientRect(&m_rcOriginalRect);
+
+  // 定义布局规则（锚点）
+  m_layoutRules.clear();
+  // 连接区域 group：左右拉伸，高度固定
+  m_layoutRules.push_back({IDC_MVC_GROUP_CONNECTION, true, true, true, false});
+  // 连接区域内部控件：左上锚定，不随右侧移动
+  m_layoutRules.push_back({IDC_MVC_STATIC_IP, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_IPADDRESS, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_STATIC_PORT, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_EDIT_PORT, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_BTN_CONNECT, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_STATIC_STATUS, true, true, false, false});
+  m_layoutRules.push_back({IDC_MVC_LED_STATUS, true, true, false, false});
+
+  // 文件区域 group：左右+上下拉伸（随窗口垂直增长）
+  m_layoutRules.push_back({IDC_MVC_GROUP_FILES, true, true, true, true});
+  // 树控件：左+上下（垂直拉伸）
+  m_layoutRules.push_back({IDC_MVC_TREE_DRIVES, true, true, false, true});
+  // 路径编辑：左右+上（只水平拉伸）
+  m_layoutRules.push_back({IDC_MVC_EDIT_PATH, true, true, true, false});
+  // 文件列表：左右+上下（完全拉伸）
+  m_layoutRules.push_back({IDC_MVC_LIST_FILES, true, true, true, true});
+  // 文件操作按钮：左+下锚定（底部对齐）
+  m_layoutRules.push_back({IDC_MVC_BTN_REFRESH, true, false, false, true});
+  m_layoutRules.push_back({IDC_MVC_BTN_UPLOAD, true, false, false, true});
+  m_layoutRules.push_back({IDC_MVC_BTN_DOWNLOAD, true, false, false, true});
+  m_layoutRules.push_back({IDC_MVC_BTN_DELETE, true, false, false, true});
+  m_layoutRules.push_back({IDC_MVC_BTN_RUN, true, false, false, true});
+
+  // 监视区域 group：左右+下，高度固定
+  m_layoutRules.push_back({IDC_MVC_GROUP_MONITOR, true, false, true, true});
+  // 监视按钮：左+下
+  m_layoutRules.push_back(
+      {IDC_MVC_BTN_START_MONITOR, true, false, false, true});
+  m_layoutRules.push_back({IDC_MVC_BTN_START_RECORD, true, false, false, true});
+
+  // 记录所有受控件的初始 Rect
+  m_originalControlRects.clear();
+  for (const auto &rule : m_layoutRules) {
+    CWnd *pWnd = GetDlgItem(rule.nID);
+    if (pWnd && pWnd->GetSafeHwnd()) {
+      CRect r;
+      pWnd->GetWindowRect(&r);
+      ScreenToClient(&r);
+      m_originalControlRects[rule.nID] = r;
+    }
+  }
 
   return TRUE;
 }
@@ -261,9 +325,10 @@ LRESULT RemoteControlViewDlg::OnUpdateSubDirs(WPARAM wParam, LPARAM lParam) {
 
 void RemoteControlViewDlg::InitToolbar() {
   // 鍒涘缓宸ュ叿鏍?
-  if (!m_toolbar.CreateEx(this, TBSTYLE_FLAT,
-                          WS_CHILD | WS_VISIBLE | CBRS_TOP | CBRS_TOOLTIPS |
-                              CBRS_FLYBY)) {
+  DWORD dwStyle = WS_CHILD | WS_VISIBLE | CBRS_TOP | CBRS_TOOLTIPS |
+                  CBRS_FLYBY | CBRS_SIZE_DYNAMIC;
+  // 先采用传统扁平图标样式，避免文字占用过多高度
+  if (!m_toolbar.CreateEx(this, TBSTYLE_FLAT, dwStyle)) {
     TRACE0("Failed to create toolbar\n");
     return;
   }
@@ -310,11 +375,13 @@ void RemoteControlViewDlg::InitToolbar() {
   };
 
   m_toolbar.GetToolBarCtrl().AddButtons(_countof(buttons), buttons);
-  m_toolbar.SetButtonText(0, _T("连接"));
-  m_toolbar.SetButtonText(1, _T("断开"));
-  m_toolbar.SetButtonText(2, _T("刷新"));
-  m_toolbar.SetButtonText(3, _T("设置"));
-  m_toolbar.SetButtonText(4, _T("帮助"));
+
+  // 先只用小图标按钮，文字通过 ToolTip/状态栏提示
+  CSize imgSize(16, 16);
+  CSize btnSize(24, 24);
+  m_toolbar.GetToolBarCtrl().SetBitmapSize(imgSize);
+  m_toolbar.GetToolBarCtrl().SetButtonSize(btnSize);
+  m_toolbar.SetSizes(btnSize, imgSize);
 
   // 閲嶆柊璁＄畻甯冨眬
   RepositionBars(AFX_IDW_CONTROLBAR_FIRST, AFX_IDW_CONTROLBAR_LAST, 0);
@@ -678,10 +745,94 @@ HCURSOR RemoteControlViewDlg::OnQueryDragIcon() {
 void RemoteControlViewDlg::OnSize(UINT nType, int cx, int cy) {
   CDialogEx::OnSize(nType, cx, cy);
 
-  // 閲嶆柊瀹氫綅宸ュ叿鏍忓拰鐘舵€佹爮
+  if (nType == SIZE_MINIMIZED || cx <= 0 || cy <= 0)
+    return;
+
+  // 保持工具栏和状态栏布局
   if (m_toolbar.GetSafeHwnd() && m_statusBar.GetSafeHwnd()) {
     RepositionBars(AFX_IDW_CONTROLBAR_FIRST, AFX_IDW_CONTROLBAR_LAST, 0);
   }
+
+  // 获取客户区大小
+  CRect rcClient;
+  GetClientRect(&rcClient);
+  if (rcClient.IsRectEmpty())
+    return;
+
+  // 如果没有记录初始控件信息，则不做自动调整
+  if (m_originalControlRects.empty())
+    return;
+
+  // 使用基于初始布局的差量调整控件位置和大小
+  int clientW = rcClient.Width();
+  int clientH = rcClient.Height();
+  AdjustControlLayout(clientW, clientH);
+}
+
+void RemoteControlViewDlg::AdjustControlLayout(int cx, int cy) {
+  // 基于 m_rcOriginalRect 和 m_originalControlRects 计算新矩形
+  int diffX = cx - m_rcOriginalRect.Width();
+  int diffY = cy - m_rcOriginalRect.Height();
+
+  // 使用 DeferWindowPos 会更高效，但这里用简单 MoveWindow
+  for (const auto &rule : m_layoutRules) {
+    auto it = m_originalControlRects.find(rule.nID);
+    if (it == m_originalControlRects.end())
+      continue;
+
+    bool isGroup =
+        (rule.nID == IDC_MVC_GROUP_CONNECTION ||
+         rule.nID == IDC_MVC_GROUP_FILES || rule.nID == IDC_MVC_GROUP_MONITOR);
+
+    CRect orig = it->second;
+    int newLeft = orig.left;
+    int newTop = orig.top;
+    int newRight = orig.right;
+    int newBottom = orig.bottom;
+
+    // Group 只做整体拉伸/平移，不改内部控件布局
+    if (isGroup) {
+      if (rule.anchorLeft && rule.anchorRight) {
+        newRight = orig.right + diffX;
+      }
+      if (rule.anchorTop && rule.anchorBottom) {
+        newBottom = orig.bottom + diffY;
+      } else if (!rule.anchorTop && rule.anchorBottom) {
+        newTop = orig.top + diffY;
+        newBottom = orig.bottom + diffY;
+      }
+    } else {
+      // 普通控件：根据锚点规则调整
+      if (rule.anchorLeft && rule.anchorRight) {
+        newRight = orig.right + diffX;
+      } else if (!rule.anchorLeft && rule.anchorRight) {
+        newLeft = orig.left + diffX;
+        newRight = orig.right + diffX;
+      }
+
+      if (rule.anchorTop && rule.anchorBottom) {
+        newBottom = orig.bottom + diffY;
+      } else if (!rule.anchorTop && rule.anchorBottom) {
+        newTop = orig.top + diffY;
+        newBottom = orig.bottom + diffY;
+      }
+    }
+
+    // 应用新位置
+    CWnd *pWnd = GetDlgItem(rule.nID);
+    if (pWnd && pWnd->GetSafeHwnd()) {
+      CRect newRect(newLeft, newTop, newRight, newBottom);
+      pWnd->MoveWindow(&newRect);
+    }
+  }
+}
+
+void RemoteControlViewDlg::OnGetMinMaxInfo(MINMAXINFO *lpMMI) {
+  // 设置最小窗口尺寸 (像素) - 匹配紧凑对话框布局 (480x380 对话框单位)
+  lpMMI->ptMinTrackSize.x = 600; // 最小宽度
+  lpMMI->ptMinTrackSize.y = 500; // 最小高度，确保监视区域可见
+
+  CDialogEx::OnGetMinMaxInfo(lpMMI);
 }
 
 // 宸ュ叿鏍忔寜閽鐞?濮旀墭缁欏搴旂殑鎸夐挳澶勭悊鍑芥暟)
@@ -1014,7 +1165,20 @@ void RemoteControlViewDlg::OnMenuProperties() {
 void RemoteControlViewDlg::OnBnClickedStartMonitor() {
   if (!controller_)
     return;
-  controller_->OnStartMonitor();
+
+  if (!m_bMonitoring) {
+    // 启动监视
+    controller_->OnStartMonitor();
+    m_bMonitoring = true;
+    m_btnStartMonitor.SetWindowText(_T("停止监视"));
+    UpdateStatusBar("屏幕监视已启动", 0);
+  } else {
+    // 停止监视
+    controller_->OnStopMonitor();
+    m_bMonitoring = false;
+    m_btnStartMonitor.SetWindowText(_T("屏幕监视"));
+    UpdateStatusBar("屏幕监视已停止", 0);
+  }
 }
 
 void RemoteControlViewDlg::OnBnClickedStartRecord() {

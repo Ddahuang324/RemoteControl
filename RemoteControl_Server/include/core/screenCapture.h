@@ -70,17 +70,21 @@ private:
 // 辅助函数：捕获屏幕图像并返回图像和像素数据
 inline std::tuple<std::shared_ptr<CImage>, BYTE *, int, int, int>
 CaptureScreenImage() {
-  // 优先尝试 GetDC(NULL)（在虚拟机中通常更可靠），若失败再尝试 CreateDC("DISPLAY")
+  // 优先尝试 GetDC(NULL)（在虚拟机中通常更可靠），若失败再尝试
+  // CreateDC("DISPLAY")
   ScopedWindowDC hScreenDC(NULL);
   ScopedHDC hDisplayDC(CreateDC(L"DISPLAY", nullptr, nullptr, nullptr));
   if (hScreenDC.get()) {
-    std::cout << "CaptureScreenImage: GetDC(NULL) succeeded, HDC=" << hScreenDC.get()
-              << std::endl;
+    std::cout << "CaptureScreenImage: GetDC(NULL) succeeded, HDC="
+              << hScreenDC.get() << std::endl;
   } else if (hDisplayDC) {
-    std::cout << "CaptureScreenImage: GetDC(NULL) failed; CreateDC(\"DISPLAY\") succeeded, HDC="
+    std::cout << "CaptureScreenImage: GetDC(NULL) failed; "
+                 "CreateDC(\"DISPLAY\") succeeded, HDC="
               << hDisplayDC.get() << std::endl;
   } else {
-    std::cout << "CaptureScreenImage: both GetDC(NULL) and CreateDC(\"DISPLAY\") failed" << std::endl;
+    std::cout << "CaptureScreenImage: both GetDC(NULL) and "
+                 "CreateDC(\"DISPLAY\") failed"
+              << std::endl;
   }
 
   // 尝试将进程设置为 DPI 感知，以确保后续的坐标/尺寸为物理像素
@@ -203,9 +207,10 @@ CaptureScreenImage() {
     if (hScreen) {
       bool blt2 = (::BitBlt(hMemDC, 0, 0, nWidth, nHeight, hScreen, originX,
                             originY, SRCCOPY) != FALSE);
-      std::cout << "CaptureScreenImage: tried BitBlt from GetDC(NULL) (ad-hoc) -> "
-                << (blt2 ? "OK" : "FAILED") << " (srcHDC=" << hScreen
-                << ", dstHDC=" << hMemDC << ")" << std::endl;
+      std::cout
+          << "CaptureScreenImage: tried BitBlt from GetDC(NULL) (ad-hoc) -> "
+          << (blt2 ? "OK" : "FAILED") << " (srcHDC=" << hScreen
+          << ", dstHDC=" << hMemDC << ")" << std::endl;
       ::ReleaseDC(NULL, hScreen);
       if (!blt2) {
         ::SelectObject(hMemDC, prevObj);
@@ -267,7 +272,9 @@ public:
       // 通过清空 m_previousFramePixels 来强制下一帧作为全屏帧发送。
       if (!packet.data.empty()) {
         if (packet.data.size() >= 1 && packet.data[0] == 1) {
-          std::cout << "CaptureAndSend: client requested forced full-frame. Clearing previous frame cache." << std::endl;
+          std::cout << "CaptureAndSend: client requested forced full-frame. "
+                       "Clearing previous frame cache."
+                    << std::endl;
           m_previousFramePixels.clear();
           m_prevWidth = 0;
           m_prevHeight = 0;

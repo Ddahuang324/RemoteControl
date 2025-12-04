@@ -37,6 +37,7 @@ public:
   void OnFileDelete(const std::string &path) override;
   void OnFileRun(const std::string &path) override;
   void OnStartMonitor() override;
+  void OnStopMonitor() override;
 
 private:
   // ---- Model接口 ----

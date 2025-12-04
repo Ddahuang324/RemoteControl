@@ -11,17 +11,19 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 
 // 自定义消息 - 用于后台线程通过PostMessage更新UI
 #define WM_UPDATE_DRIVE_LIST (WM_APP + 0x101)
 #define WM_UPDATE_FILE_LIST (WM_APP + 0x102)
 #define WM_UPDATE_SUB_DIRS (WM_APP + 0x103)
 
-// 子目录更新数据结构 - 直接使用 HTREEITEM 句柄
+// Subdirectory update data structure - use HTREEITEM handle directly
 struct SubDirUpdateData {
-  HTREEITEM hParent; // 目标树节点句柄
+  HTREEITEM hParent; // Target tree node handle
   std::vector<FileSystemProtocol::FileEntry> entries;
-  bool isFirst; // 是否为第一批数据（用于清空旧节点）
+  bool isFirst; // Whether it is the first batch of data (used to clear old
+                // nodes)
 };
 
 // ============================================================================
@@ -132,6 +134,9 @@ protected:
   // 窗口大小变化
   afx_msg void OnSize(UINT nType, int cx, int cy);
 
+  // 窗口大小限制
+  afx_msg void OnGetMinMaxInfo(MINMAXINFO *lpMMI);
+
   // 后台线程通过 PostMessage 通知网络状态变化
   afx_msg LRESULT OnNetworkStatusChanged(WPARAM wParam, LPARAM lParam);
 
@@ -145,6 +150,22 @@ protected:
   afx_msg LRESULT OnUpdateSubDirs(WPARAM wParam, LPARAM lParam);
 
 private:
+  // ===== 响应式布局支持 =====
+  struct ControlAnchor {
+    int nID; // 控件ID
+    bool anchorLeft;
+    bool anchorTop;
+    bool anchorRight;
+    bool anchorBottom;
+  };
+
+  std::vector<ControlAnchor> m_layoutRules; // 布局规则
+  CRect m_rcOriginalRect;                    // OnInitDialog 时的客户区
+  std::map<int, CRect> m_originalControlRects; // 每个受控件的初始 rect
+
+  // 调整单个控件布局（在 OnSize 中调用）
+  void AdjustControlLayout(int cx, int cy);
+
   // ---- Model接口 ----
   std::shared_ptr<INetworkModel> network_;
   std::shared_ptr<IFileSystemModel> fileSystem_;
@@ -188,12 +209,14 @@ private:
   // ---- 内部状态 ----
   HICON m_hIcon;
   bool m_bConnected;
+  bool m_bMonitoring;        // 屏幕监视状态
   bool m_bFileListCleared;   // 标记文件列表是否已为新目录清空
   CString m_strCurrentPath;  // 当前浏览的路径
   CString m_strSelectedFile; // 当前选中的文件
 
-  // ---- 防抖状态 ----
-  CString m_strLastSelectedPath; // 上一次选中的路径（用于OnTreeSelChanged防抖）
+  // ---- Debounce state ----
+  CString m_strLastSelectedPath; // Last selected path (for OnTreeSelChanged
+                                 // debounce)
 
   // ---- 辅助方法 ----
 

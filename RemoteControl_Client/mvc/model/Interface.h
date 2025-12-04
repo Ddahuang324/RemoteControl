@@ -138,4 +138,6 @@ public:
   // 坐标基于远端画布坐标系（0..width-1）
   virtual void injectMouse(int x, int y, int button, bool down) = 0;
   virtual void injectKey(int keycode, bool down) = 0;
+  // 发送锁机/解锁命令到远端
+  virtual void sendLockCommand(bool lock) = 0;
 };

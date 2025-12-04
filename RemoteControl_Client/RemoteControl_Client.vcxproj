@@ -94,6 +94,7 @@
       <PreprocessorDefinitions>_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -119,6 +120,7 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -146,6 +148,7 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       
     </ClCompile>
     <Link>
@@ -174,6 +177,7 @@
       <PreprocessorDefinitions>_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       
     </ClCompile>
     <Link>
@@ -211,6 +215,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="RemoteControl_Client.cpp" />
     <ClCompile Include="mvc\controller\ClientController.cpp" />
@@ -222,7 +227,9 @@
     <ClCompile Include="mvc\model\IOModel.cpp" />
     <ClCompile Include="mvc\model\MoniterModel.cpp" />
     <ClCompile Include="mvc\model\NetworkModel.cpp" />
-    <ClCompile Include="mvc\view\MonitorViewDlg.cpp" />
+    <ClCompile Include="mvc\view\MonitorViewDlg.cpp">
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="mvc\view\RemoteControlViewDlg.cpp" />
       <ClCompile Include="include\Infra\Packet.cpp" />
       <ClCompile Include="include\Infra\Socket.cpp" />

@@ -1,8 +1,7 @@
-
-// encoding: UTF-8
 #include "pch.h"
-#include "MoniterModel.h"
+#pragma execution_character_set("utf-8")
 #include "Interface.h"
+#include "MoniterModel.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,7 +14,6 @@
 #include <thread>
 #include <wincodec.h>
 #include <wrl.h>
-
 
 #pragma comment(lib, "Windowscodecs.lib")
 
@@ -100,7 +98,7 @@ public:
     if (FAILED(hr))
       return false;
 
-    hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA,
+    hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
                                WICBitmapDitherTypeNone, nullptr, 0.0,
                                WICBitmapPaletteTypeCustom);
     if (FAILED(hr))
@@ -191,7 +189,7 @@ static bool SaveRgbaToPng(const std::vector<uint8_t> &rgba, int width,
 
   hr = frame->Initialize(props);
   hr = frame->SetSize((UINT)width, (UINT)height);
-  WICPixelFormatGUID format = GUID_WICPixelFormat32bppRGBA;
+  WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
   hr = frame->SetPixelFormat(&format);
 
   UINT stride = (UINT)(width * 4);
@@ -273,16 +271,41 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
             memcpy(&y, data.data() + 4, 4);
             memcpy(&w, data.data() + 8, 4);
             memcpy(&h, data.data() + 12, 4);
+
+            // 如果宽或高为 0，则这是服务端发送的心跳/无变化包（占位符），
+            // 不应将其作为图像数据进行解码/渲染。直接跳过，保持上一帧。
+            if (w <= 0 || h <= 0) {
+              // 记录一次诊断日志，便于线上排查（不频繁打印）
+              try {
+                std::clog << "MonitorModel: ignore heartbeat/no-change packet, size="
+                          << data.size() << std::endl;
+              } catch (...) {
+              }
+              continue; // ignore heartbeat / no-change packet
+            }
+
             spd.roi_x = x;
             spd.roi_y = y;
             spd.roi_w = w;
             spd.roi_h = h;
             size_t payloadSize = data.size() - 16;
-            if (payloadSize > 0) {
+
+            // 服务端在无变化时会发送 1 字节占位符，排除该情况（需要实际图像数据）
+            if (payloadSize > 1) {
               spd.compressed = true;
               spd.compressedPayload.assign(data.begin() + 16, data.end());
               spd.mimeType = "image/png";
               spd.isFullFrame = (x == 0 && y == 0);
+              // 标记宽高并记录时间戳，以便后续处理与调试
+              try {
+                auto now = std::chrono::system_clock::now();
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              now.time_since_epoch())
+                              .count();
+                spd.timestampMs = (long long)ms;
+              } catch (...) {
+                spd.timestampMs = 0;
+              }
               spd.width = w;
               spd.height = h;
               ok = true;
@@ -313,17 +336,41 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
     }
   });
 
-  // create decoder (WIC) implementation and attach to protocol-owned decoder
-  // (IDecoder)
-  try {
-    m_monitorRes->decoder = std::make_shared<LocalWicDecoder>();
-  } catch (...) {
-    m_monitorRes->decoder.reset();
-  }
+  // Start request thread: periodically send CMD_SCREEN_CAPTURE
+  m_monitorRes->requestThread = std::thread([this]() {
+    bool firstRequest = true; // 请求首帧时带标志，强制服务端返回全帧
+    while (m_monitorRes->running.load()) {
+      if (net_) {
+        Packet req;
+        req.sCmd = static_cast<WORD>(CMD_SCREEN_CAPTURE);
+        // 首次请求带 1 字节负载，通知服务端强制发送全帧（Full Frame)
+        if (firstRequest) {
+          req.data = std::vector<uint8_t>{1};
+          firstRequest = false;
+        }
+        // Optional: payload could specify quality or partial update request
+        net_->sendPacket(req);
+      }
+
+      // Control request frequency based on FPS
+      int fps = m_monitorRes->fps > 0 ? m_monitorRes->fps : 10;
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000 / fps));
+    }
+  });
 
   // Start decoder thread: decode compressed payload -> FrameData (owned by
   // protocol)
   m_monitorRes->decodeThread = std::thread([this]() {
+    // Initialize COM for WIC usage inside decoder thread
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool comInited = SUCCEEDED(hr);
+    std::shared_ptr<LocalWicDecoder> localDecoder;
+    try {
+      localDecoder = std::make_shared<LocalWicDecoder>();
+    } catch (...) {
+      localDecoder.reset();
+    }
+
     while (m_monitorRes->running.load()) {
       MonitorProtocol::ScreenPacketData spd;
       {
@@ -345,18 +392,12 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
       int w = spd.width;
       int h = spd.height;
       bool decoded = false;
-      if (spd.compressed && m_monitorRes->decoder) {
-        // Ensure COM initialized for this thread (WIC uses COM)
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        bool comInited = SUCCEEDED(hr);
+      if (spd.compressed && localDecoder) {
         try {
-          decoded = m_monitorRes->decoder->DecodeToRGBA(spd.compressedPayload,
-                                                        rgba, w, h);
+          decoded = localDecoder->DecodeToRGBA(spd.compressedPayload, rgba, w, h);
         } catch (...) {
           decoded = false;
         }
-        if (comInited)
-          CoUninitialize();
       }
 
       // Compose ROI into canvas (model-owned) and emit full RGBA frame
@@ -579,6 +620,9 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
             std::chrono::milliseconds(1000 / m_monitorRes->fps));
       }
     }
+
+    if (comInited)
+      CoUninitialize();
   });
 }
 
@@ -595,6 +639,8 @@ void MonitorModel::stopCapture() {
     m_monitorRes->netThread.join();
   if (m_monitorRes->decodeThread.joinable())
     m_monitorRes->decodeThread.join();
+  if (m_monitorRes->requestThread.joinable())
+    m_monitorRes->requestThread.join();
 }
 
 // IIoModel 委托实现
@@ -619,9 +665,11 @@ void MonitorModel::setNetworkModel(std::shared_ptr<INetworkModel> net) {
   }
 
   if (net_) {
-    // When network receives a packet, push it into this model's buffer and notify
+    // When network receives a packet, push it into this model's buffer and
+    // notify
     net_->setOnPacketReceived([this](const Packet &p) {
-      if (!m_netBuffer) return;
+      if (!m_netBuffer)
+        return;
       {
         std::lock_guard<std::mutex> lk(m_netBuffer->queueMutex);
         m_netBuffer->packetQueue.push_back(p);
@@ -636,7 +684,8 @@ void MonitorModel::setNetworkModel(std::shared_ptr<INetworkModel> net) {
       if (!connected) {
         if (m_monitorRes) {
           m_monitorRes->running.store(false);
-          if (m_netBuffer) m_netBuffer->queueCv.notify_all();
+          if (m_netBuffer)
+            m_netBuffer->queueCv.notify_all();
           m_monitorRes->screenCv.notify_all();
         }
       }

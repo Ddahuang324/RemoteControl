@@ -2,7 +2,9 @@
 #include "MainController.h"
 #include "../view/MonitorViewDlg.h"
 #include "MonitorController.h"
+
 #include <thread>
+
 
 MainController::MainController(std::shared_ptr<INetworkModel> network,
                                std::shared_ptr<IFileSystemModel> fileSystem,
@@ -219,8 +221,8 @@ void MainController::OnStartMonitor() {
   // 鍒涘缓鐩戣绐楀彛瀵硅薄 (杩樻湭鍒涘缓绐楀彛鍙ユ焺)
   monitorView_ = new MonitorViewDlg(monitor_, io_);
 
-  // 鍒涘缓鐩戣Controller锛圡onitorController 鏋勯€犲嚱鏁颁粎鎺ュ彈
-  // monitor锛?
+  // 鍒涘缓鐩戣Controller锛圡onitorController
+  // 鏋勯€犲嚱鏁颁粎鎺ュ彈 monitor锛?
   monitorController_ = std::make_shared<MonitorController>(monitor_);
   // 娉ㄥ叆 IOModel 鍒?Controller
   monitorController_->setIoModel(io_);
@@ -246,8 +248,8 @@ void MainController::OnStartMonitor() {
     monitorController_->attachView(monitorView_->GetSafeHwnd());
     monitorView_->ShowWindow(SW_SHOW);
 
-    // 鍦ㄧ獥鍙ｅ畬鍏ㄥ垱寤哄悗鍚姩灞忓箷鎹曡幏锛岄伩鍏嶅湪 OnInitDialog
-    // 闃舵瑙﹀彂鏂█
+    // 鍦ㄧ獥鍙ｅ畬鍏ㄥ垱寤哄悗鍚姩灞忓箷鎹曡幏锛岄伩鍏嶅湪
+    // OnInitDialog 闃舵瑙﹀彂鏂█
     if (monitorController_) {
       monitorController_->OnStartCapture(30);
     }
@@ -260,4 +262,23 @@ void MainController::OnStartMonitor() {
       view_->ShowError("鍒涘缓鐩戣绐楀彛澶辫触");
     }
   }
+}
+
+void MainController::OnStopMonitor() {
+  // 停止屏幕捕获
+  if (monitorController_) {
+    monitorController_->OnStopCapture();
+  }
+
+  // 关闭监视窗口
+  if (monitorView_ != nullptr && ::IsWindow(monitorView_->GetSafeHwnd())) {
+    monitorView_->DestroyWindow();
+  }
+
+  // 清理资源
+  if (monitorView_) {
+    delete monitorView_;
+    monitorView_ = nullptr;
+  }
+  monitorController_.reset();
 }

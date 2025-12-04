@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-
 // ============================================================================
 // MonitorViewDlg: 监视窗口View
 // 职责:
@@ -95,6 +94,9 @@ protected:
   // 窗口关闭
   afx_msg void OnClose();
 
+  // 自定义消息处理
+  afx_msg LRESULT OnUpdateFrame(WPARAM wParam, LPARAM lParam);
+
 private:
   // ---- Model接口 ----
   std::shared_ptr<IMonitorModel> monitor_;
@@ -106,12 +108,15 @@ private:
   // ---- UI控件 ----
   CToolBar m_toolbar;
   CStatusBar m_statusBar;
-  CWnd* m_pCanvasWnd = nullptr; // 画布区域窗口指针（不使用DDX_Control）
+  CWnd *m_pCanvasWnd = nullptr; // 画布区域窗口指针（不使用DDX_Control）
 
   // ---- 显示状态 ----
+  static constexpr int SIDEBAR_WIDTH = 120; // 侧边栏宽度
+
   std::shared_ptr<const ::FrameData> m_currentFrame;
   float m_fZoomScale; // 缩放比例(1.0 = 100%)
   CRect m_canvasRect; // 画布区域矩形
+  CRect m_frameRect;  // 当前帧实际绘制区域
   bool m_bFullscreen;
 
   // ---- 控制状态 ----
@@ -134,12 +139,27 @@ private:
   // 计算画布区域
   void CalculateCanvasRect();
 
+  // 初始化侧边栏
+  void InitSidebar();
+
   // 将窗口坐标转换为远程屏幕坐标
   CPoint WindowToRemote(CPoint pt);
 
   // 绘制帧到DC
-  void DrawFrame(CDC *pDC);
+  void DrawFrame(CDC *pDC, const CRect &rect);
 
   // 更新工具栏按钮状态
   void UpdateToolbarStates();
+
+  // 窗口大小限制
+  afx_msg void OnGetMinMaxInfo(MINMAXINFO *lpMMI);
+
+  // 侧边栏按钮处理
+  afx_msg void OnSidebarMouseCtrl();
+  afx_msg void OnSidebarLockScreen();
+
+  // ---- 侧边栏控件 ----
+  CButton m_btnSidebarMouse; // 鼠标操作按钮
+  CButton m_btnSidebarLock;  // 锁机/解锁按钮
+  bool m_bScreenLocked;      // 屏幕锁定状态
 };
