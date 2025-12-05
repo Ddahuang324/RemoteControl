@@ -1,0 +1,132 @@
+// Microsoft Visual C++ generated resource script.
+//
+#pragma code_page(65001)
+#include "resource_mvc.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "winres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(简体，中国) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource_mvc.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""winres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_MVC_MAIN_DIALOG DIALOGEX 0, 0, 520, 480
+STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME
+CAPTION "远程控制客户端 (MVC)"
+FONT 9, "Microsoft YaHei UI", 400, 0, 0x86
+BEGIN
+    // 连接分组框 - 水平铺满（左右边距7）
+    GROUPBOX        "连接设置",IDC_MVC_GROUP_CONNECTION,7,7,506,50
+    LTEXT           "服务器IP:",IDC_MVC_STATIC_IP,15,25,40,12
+    CONTROL         "",IDC_MVC_IPADDRESS,"SysIPAddress32",WS_TABSTOP,60,23,100,14
+    LTEXT           "端口:",IDC_MVC_STATIC_PORT,170,25,25,12
+    EDITTEXT        IDC_MVC_EDIT_PORT,200,23,50,14,ES_AUTOHSCROLL | ES_NUMBER
+    PUSHBUTTON      "连接",IDC_MVC_BTN_CONNECT,260,23,60,14
+    LTEXT           "状态:",IDC_MVC_STATIC_STATUS,330,25,25,12
+    CONTROL         "",IDC_MVC_LED_STATUS,"Static",SS_OWNERDRAW,360,25,12,12
+    
+    // 文件管理分组框 - 填充主区域
+    GROUPBOX        "远程文件管理",IDC_MVC_GROUP_FILES,7,62,506,350
+    CONTROL         "",IDC_MVC_TREE_DRIVES,"SysTreeView32",TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT | WS_BORDER | WS_TABSTOP,15,78,150,300
+    LTEXT           "路径:",IDC_STATIC,175,80,25,12
+    EDITTEXT        IDC_MVC_EDIT_PATH,205,78,300,14,ES_AUTOHSCROLL | ES_READONLY
+    CONTROL         "",IDC_MVC_LIST_FILES,"SysListView32",LVS_REPORT | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP,175,98,330,255
+    PUSHBUTTON      "刷新驱动器",IDC_MVC_BTN_REFRESH,15,385,70,20
+    PUSHBUTTON      "上传",IDC_MVC_BTN_UPLOAD,175,360,60,20
+    PUSHBUTTON      "下载",IDC_MVC_BTN_DOWNLOAD,245,360,60,20
+    PUSHBUTTON      "删除",IDC_MVC_BTN_DELETE,315,360,60,20
+    PUSHBUTTON      "运行",IDC_MVC_BTN_RUN,385,360,60,20
+    
+    // 监视控制分组框 - 底部固定高度
+    GROUPBOX        "远程监视",IDC_MVC_GROUP_MONITOR,7,418,506,50
+    PUSHBUTTON      "开始屏幕监视",IDC_MVC_BTN_START_MONITOR,15,435,100,20
+    PUSHBUTTON      "开始录制",IDC_MVC_BTN_START_RECORD,125,435,80,20
+    
+    // 状态栏占位(由代码创建)
+    CONTROL         "",IDC_MVC_STATUSBAR,"msctls_statusbar32",WS_CHILD | WS_VISIBLE,0,0,0,0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_MVC_MAIN_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 513
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 473
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_MVC_MAIN_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // 中文(简体，中国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED

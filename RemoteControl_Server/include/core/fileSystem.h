@@ -1,0 +1,155 @@
+#pragma once
+
+#include <string>
+#include <windows.h>
+#include "Enities.h"
+#include <filesystem>
+#include "ServerSocket.h"
+#include <iostream>
+#include <fstream>
+
+
+
+
+std::string GetDriverInfo() {
+	DWORD driveMask = GetLogicalDrives();
+
+	if(driveMask == 0) {
+		return "";
+	}
+	std::string driveInfo;
+	driveInfo.reserve(26 * 3); 
+	
+	for(int i  = 0; i < 26; ++i) {
+		if(driveMask & (1 << i)) {
+			char driveLetter = 'A' + i;
+			driveInfo += driveLetter;
+			driveInfo += ":\\ ";
+		}
+	}
+	return driveInfo;
+}
+
+int DirectoryInfor(const std::string& path, CServerSocket& ClientSocket){
+	std::filesystem::path targetPath(path);
+
+	try{
+		if (!std::filesystem::exists(targetPath) || !std::filesystem::is_directory(targetPath)) {
+			
+			std::cerr << "Invalid path: " << path << std::endl;
+			std::string errMsg = "Invalid path: " + path;
+			ClientSocket.SendErrorPacket(errMsg);
+			return -1; // 错误
+		}
+		// 收集所有条目
+		std::vector<std::filesystem::directory_entry> entries;
+		for (const auto& entry : std::filesystem::directory_iterator(targetPath)) {
+			entries.push_back(entry);
+		}
+		
+		// 发送每个条目
+		for (size_t i = 0; i < entries.size(); ++i) {
+			const auto& entry = entries[i];
+			try {
+				bool hasNext = (i < entries.size() - 1);
+				// 修复：发送完整路径而不是仅文件名，这样客户端可以正确构建下级目录请求
+				std::string fullPath = entry.path().string();
+				File_Info fileInfo(std::filesystem::is_directory(entry.path()), fullPath, hasNext);
+				ClientSocket.SendPacket(Cpacket(CMD::CMD_DIRECTORY_INFO, fileInfo.FileInfoSerialize()));
+			} catch (std::filesystem::filesystem_error& e) {
+				std::cerr << "Error accessing file: " << e.what() << std::endl;
+			}
+		}
+		
+		// 发送结束包
+		File_Info endOfListPacket(false, "", false);
+		ClientSocket.SendPacket(Cpacket(CMD::CMD_DIRECTORY_INFO, endOfListPacket.FileInfoSerialize()));
+		return 0; // 成功
+	}
+	catch (const std::filesystem::filesystem_error& e) {
+		std::cerr << "Filesystem error: " << e.what() << std::endl;
+		std::string errMsg = std::string("Filesystem error: ") + e.what();
+		ClientSocket.SendErrorPacket(errMsg);
+		return -1;
+	}
+
+}
+
+
+int RunFile(const std::string& path, CServerSocket& ClientSocket) {
+    // 运行文件
+    HINSTANCE result = ShellExecuteA(NULL, "open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    if ((int)result <= 32) {
+        // 运行失败，发送错误包
+        std::string errMsg = "Failed to run file: " + path;
+        ClientSocket.SendErrorPacket(errMsg);
+        return -1;
+    }
+    // 成功运行，发送确认包（可选）
+    std::vector<BYTE> pathData(path.begin(), path.end());
+    Cpacket packet(CMD::CMD_RUN_FILE, pathData);
+    ClientSocket.SendPacket(packet);
+    return 0;
+}
+
+int DownloadFile(const std::string& path, CServerSocket& ClientSocket) {
+	
+	std::ifstream ifile(path, std::ios::binary | std::ios::ate);
+
+	if(!ifile.is_open()){
+
+		std::cerr << "Failed to open file: " << path << std::endl;
+		std::string errMsg = "Failed to open file: " + path;
+		ClientSocket.SendErrorPacket(errMsg);
+		return -1;
+	}
+
+
+	std::streamsize FileSize = ifile.tellg();
+	ifile.seekg(0, std::ios::beg);
+
+	// 发送文件大小
+	std::vector<BYTE> sizeData(sizeof(std::streamsize));
+	memcpy(sizeData.data(), &FileSize, sizeof(std::streamsize));
+	Cpacket HeaderPacket(CMD::CMD_DOWNLOAD_FILE, sizeData);
+	ClientSocket.SendPacket(HeaderPacket);
+
+	std::vector<BYTE> buffer(1024);
+
+	while (true) {
+		ifile.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+		size_t bytesRead = ifile.gcount();
+		if (bytesRead == 0) break;
+		ClientSocket.SendPacket(Cpacket(CMD::CMD_DOWNLOAD_FILE, std::vector<BYTE>(buffer.data(), buffer.data() + bytesRead)));
+	}
+
+	// 发送结束包
+	Cpacket eofPacket(CMD::CMD_EOF, std::vector<BYTE>());
+	ClientSocket.SendPacket(eofPacket);
+
+	return 0;
+}
+
+int DeleteFile(const std::string& path, CServerSocket& ClientSocket) {
+    try {
+        if (std::filesystem::remove(path)) {
+            // 成功删除，发送确认包
+            std::vector<BYTE> pathData(path.begin(), path.end());
+            Cpacket packet(CMD::CMD_DELETE_FILE, pathData);
+            ClientSocket.SendPacket(packet);
+            return 0;
+        } else {
+            // 删除失败
+            std::string errMsg = "Failed to delete file: " + path;
+            ClientSocket.SendErrorPacket(errMsg);
+            return -1;
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::string errMsg = "Filesystem error: " + std::string(e.what());
+        ClientSocket.SendErrorPacket(errMsg);
+        return -1;
+    }
+}
+
+
+
