@@ -168,7 +168,7 @@ struct FileSystemProtocol {
     std::string name;
     bool isDirectory = false;
     uint64_t size = 0;
-    uint64_t mtime = 0; // 可选：最后修改时间
+    uint64_t mtime = 0; 
   };
 
   std::unique_ptr<FileResources> m_fileResources;

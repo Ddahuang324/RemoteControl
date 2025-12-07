@@ -277,7 +277,6 @@ void MonitorViewDlg::UpdateFrame(std::shared_ptr<const ::FrameData> frame) {
     m_statusBar.SetPaneText(3, resText);
   }
 
-  // 瑙﹀彂閲嶇粯
   Invalidate(FALSE);
 }
 

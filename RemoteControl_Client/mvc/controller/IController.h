@@ -71,7 +71,7 @@ public:
   virtual ~IMonitorController() = default;
 
   // ---- 屏幕捕获控制 ----
-  // 启动屏幕捕获: fps为帧率(1-60)
+  // 启动屏幕捕获:
   virtual void OnStartCapture(int fps) = 0;
 
   // 停止屏幕捕获

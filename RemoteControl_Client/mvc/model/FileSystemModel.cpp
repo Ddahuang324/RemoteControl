@@ -9,6 +9,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <string>
 
 // 简单的 TransferHandle 实现
 class SimpleTransferHandle : public IFileSystemModel::TransferHandle {

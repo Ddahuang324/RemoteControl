@@ -237,12 +237,12 @@ void MonitorModel::stopRecording() {
 
 void MonitorModel::startCapture(int fps, FrameCb cb) {
   if (!m_monitorRes)
-    m_monitorRes = std::make_unique<MonitorProtocol::MonitorResources>();
+  m_monitorRes = std::make_unique<MonitorProtocol::MonitorResources>();
   m_monitorRes->fps = fps > 0 ? fps : 10;
   m_monitorRes->frameCb = std::move(cb);
   m_monitorRes->running.store(true);
 
-  // Start network consumer thread (owned by protocol resources)
+
   m_monitorRes->netThread = std::thread([this]() {
     while (m_monitorRes->running.load()) {
       // Wait for packet in inherited buffer
@@ -336,7 +336,6 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
     }
   });
 
-  // Start request thread: periodically send CMD_SCREEN_CAPTURE
   m_monitorRes->requestThread = std::thread([this]() {
     bool firstRequest = true; // 请求首帧时带标志，强制服务端返回全帧
     while (m_monitorRes->running.load()) {
@@ -358,7 +357,6 @@ void MonitorModel::startCapture(int fps, FrameCb cb) {
     }
   });
 
-  // Start decoder thread: decode compressed payload -> FrameData (owned by
   // protocol)
   m_monitorRes->decodeThread = std::thread([this]() {
     // Initialize COM for WIC usage inside decoder thread

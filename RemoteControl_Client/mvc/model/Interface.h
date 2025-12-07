@@ -66,8 +66,7 @@ public:
     virtual void cancel() = 0;
   };
 
-  using ListCb = std::function<void(
-      const std::vector<FileSystemProtocol::FileEntry> &entries, bool hasMore)>;
+  using ListCb = std::function<void(const std::vector<FileSystemProtocol::FileEntry> &entries, bool hasMore)>;
   using DrivesCb = std::function<void(const std::vector<std::string> &drives)>;
   using ProgressCb = std::function<void(int percent)>; // 0-100
   using ResultCb = std::function<void(bool success, const std::string &errmsg)>;

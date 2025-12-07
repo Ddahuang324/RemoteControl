@@ -324,7 +324,8 @@ public:
         std::cout << "Screen data size (fallback PNG): " << screenData.size()
                   << " bytes" << std::endl;
         Cpacket screenPacket(CMD::CMD_SCREEN_CAPTURE, screenData);
-        ClientSocket.SendPacket(screenPacket);
+        ClientSocket.SendPacket(screenPacket,
+                                SendPriority::LOW); // 屏幕帧低优先级
 
         // 更新上一帧为 empty（上次帧保持不变），后续帧仍可继续
         return;
@@ -403,7 +404,8 @@ public:
                 << std::endl;
 
       Cpacket screenPacket(CMD::CMD_SCREEN_CAPTURE, screenData);
-      ClientSocket.SendPacket(screenPacket);
+      ClientSocket.SendPacket(screenPacket,
+                              SendPriority::LOW); // 屏幕帧低优先级
 
       // 更新上一帧：将旧的 previous 放回池中，然后保存当前帧为新的 previous
       if (!m_previousFramePixels.empty()) {

@@ -8,7 +8,6 @@
 #include <vector>
 #include <windows.h>
 
-
 using BYTE = unsigned char;
 using DWORD = unsigned long;
 
@@ -133,7 +132,7 @@ inline void HandleMouseEvent(CServerSocket &ClientSocket,
       break;
     }
     Cpacket ackPacket(CMD::CMD_MOUSE_EVENT, mouse.Serialize());
-    ClientSocket.SendPacket(ackPacket);
+    ClientSocket.SendPacket(ackPacket, SendPriority::HIGH); // 鼠标响应高优先级
   } catch (const std::exception &e) {
     std::cerr << "HandleMouseEvent exception: " << e.what() << std::endl;
     ClientSocket.SendErrorPacket(e.what());

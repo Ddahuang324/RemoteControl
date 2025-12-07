@@ -8,7 +8,6 @@
 #include <vector>
 
 // FileSystemModel: Model 层的骨架实现，负责文件系统相关的网络交互与传输管理。
-// 当前实现为骨架/最小可运行实现：
 // - 提供构造/析构与基本成员
 // - 提供简单的 listDrives/listDirectory 回调（空实现）
 // - 提供 download/upload 返回可取消的 TransferHandle（异步任务会立即返回“未实现”结果）
@@ -42,9 +41,6 @@ private:
   std::shared_ptr<ThreadPool> pool_;
 
   // 串行化所有网络操作：确保同一时刻只有一个线程在进行网络交互
-  // 这包括 listDrives、listDirectory、downloadFile、deleteFile、runFile 等操作
-  // 保证同一时刻只有一个线程在调用 network_->sendPacket/getNextPacketBlocking。
-  // 这是必要的，因为服务端使用单连接模型，请求和响应必须配对。
   std::mutex networkMutex_;
   
   // 保留 downloadMutex_ 用于向后兼容（可在后续版本移除）
